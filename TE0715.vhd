@@ -304,6 +304,26 @@ begin
    -- axiReadSlave  <= AXI_READ_SLAVE_FORCE_C;
    -- axiWriteSlave <= AXI_WRITE_SLAVE_FORCE_C;
 
+   U_Ila_Axi : entity work.IlaAxi4SurfWrapper
+      port map (
+          axiClk                      => sysClk,
+          axiRst                      => sysRst,
+          axiReadMaster               => axiReadMaster,
+          axiReadSlave                => axiReadSlave,
+          axiWriteMaster              => axiWriteMaster,
+          axiWriteSlave               => axiWriteSlave
+      );
+
+   U_Ila_Axil : entity work.IlaAxilSurfWrapper
+      port map (
+          axilClk                     => sysClk,
+          axilRst                     => sysRst,
+          axilReadMaster              => axilReadMaster,
+          axilReadSlave               => axilReadSlave,
+          axilWriteMaster             => axilWriteMaster,
+          axilWriteSlave              => axilWriteSlave
+      );
+
    GEN_INTERCONNECT : if ( GEN_IC_C ) generate
 
    constant REG_C   : slv(3 downto 0) := "0000";
@@ -415,7 +435,8 @@ begin
          XIL_DEVICE_G     => "7SERIES",
          AXIL_BASE_ADDR_G => x"40000000",
          USE_SLOWCLK_G    => true,
-         TPGMINI_G        => false,
+         TPGMINI_G        => true,
+         GEN_TIMING_G     => true,
          NUM_TRIGS_G      => NUM_TRIGS_G,
          FIFO_DEPTH_G     => FIFO_DEPTH_C)
       port map (
