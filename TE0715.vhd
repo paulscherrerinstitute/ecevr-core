@@ -326,77 +326,22 @@ begin
 
    GEN_INTERCONNECT : if ( GEN_IC_C ) generate
 
-   constant REG_C   : slv(3 downto 0) := "0000";
-
    begin
 
-        U_A2A : entity work.axi4_2_axil_wrapper
+     U_A2A : entity work.Axi4ToAxilSurfWrapper
         port map (
           axiClk                      => sysClk,
-          axiRstN                     => sysRstN,
-          axi4_araddr                 => axiReadMaster.araddr(31 downto 0),
-          axi4_arburst                => axiReadMaster.arburst,
-          axi4_arcache                => axiReadMaster.arcache,
-          axi4_arid                   => axiReadMaster.arid(11 downto 0),
-          axi4_arlen                  => axiReadMaster.arlen(7 downto 0),
-          axi4_arlock                 => axiReadMaster.arlock(0 downto 0),
-          axi4_arprot                 => axiReadMaster.arprot(2 downto 0),
-          axi4_arqos                  => axiReadMaster.arqos(3 downto 0),
-          axi4_arready                => axiReadSlave.arready,
-          axi4_arregion               => REG_C,
-          axi4_arsize                 => axiReadMaster.arsize( 2 downto 0 ),
-          axi4_arvalid                => axiReadMaster.arvalid,
+          axiRst                      => sysRst,
 
-          axi4_awaddr                 => axiWriteMaster.awaddr( 31 downto 0 ),
-          axi4_awburst                => axiWriteMaster.awburst ( 1 downto 0 ),
-          axi4_awcache                => axiWritemaster.awcache( 3 downto 0 ),
-          axi4_awid                   => axiWritemaster.awid(11 to 0 ),
-          axi4_awlen                  => axiWriteMaster.awlen ( 7 downto 0 ),
-          axi4_awlock                 => axiWriteMaster.awlock( 0 to 0 ),
-          axi4_awprot                 => axiWritemaster.awprot( 2 downto 0 ),
-          axi4_awqos                  => axiWriteMaster.awqos( 3 downto 0 ),
-          axi4_awready                => axiWriteSlave.awready,
-          axi4_awregion               => REG_C,
-          axi4_awsize                 => axiWriteMaster.awsize( 2 downto 0 ),
-          axi4_awvalid                => axiWriteMaster.awvalid,
+          axiReadMaster               => axiReadMaster,
+          axiReadSlave                => axiReadSlave,
+          axiWriteMaster              => axiWriteMaster,
+          axiWriteSlave               => axiWriteSlave,
 
-          axi4_bid                    => axiWriteSlave.bid(11 to 0 ),
-          axi4_bready                 => axiWriteMaster.bready,
-          axi4_bresp                  => axiWriteSlave.bresp( 1 downto 0 ),
-          axi4_bvalid                 => axiWriteSlave.bvalid,
-
-          axi4_rdata                  => axiReadSlave.rdata( 31 downto 0 ),
-          axi4_rid                    => axiReadSlave.rid(11 downto 0 ),
-          axi4_rlast                  => axiReadSlave.rlast,
-          axi4_rready                 => axiReadMaster.rready,
-          axi4_rresp                  => axiReadSlave.rresp( 1 downto 0 ),
-          axi4_rvalid                 => axiReadSlave.rvalid,
-
-          axi4_wdata                  => axiWriteMaster.wdata( 31 downto 0 ),
-          axi4_wlast                  => axiWriteMaster.wlast,
-          axi4_wready                 => axiWriteSlave.wready,
-          axi4_wstrb                  => axiWriteMaster.wstrb( 3 downto 0 ),
-          axi4_wvalid                 => axiWriteMaster.wvalid,
-
-          axil_araddr                 => axilReadMaster.araddr,
-          axil_arprot                 => axilReadMaster.arprot,
-          axil_arready                => axilReadSlave.arready,
-          axil_arvalid                => axilReadMaster.arvalid,
-          axil_awaddr                 => axilWriteMaster.awaddr,
-          axil_awprot                 => axilWriteMaster.awprot,
-          axil_awready                => axilWriteSlave.awready,
-          axil_awvalid                => axilWriteMaster.awvalid,
-          axil_bready                 => axilWriteMaster.bready,
-          axil_bresp                  => axilWriteSlave.bresp,
-          axil_bvalid                 => axilWriteSlave.bvalid,
-          axil_rdata                  => axilReadSlave.rdata,
-          axil_rready                 => axilReadMaster.rready,
-          axil_rresp                  => axilReadSlave.rresp,
-          axil_rvalid                 => axilReadSlave.rvalid,
-          axil_wdata                  => axilWriteMaster.wdata,
-          axil_wready                 => axilWriteSlave.wready,
-          axil_wstrb                  => axilWriteMaster.wstrb,
-          axil_wvalid                 => axilWriteMaster.wvalid
+          axilReadMaster              => axilReadMaster,
+          axilReadSlave               => axilReadSlave,
+          axilWriteMaster             => axilWriteMaster,
+          axilWriteSlave              => axilWriteSlave
         );
 
    end generate;
