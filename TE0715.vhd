@@ -35,7 +35,7 @@ entity TE0715 is
       BUILD_INFO_G  : BuildInfoType;
       SIM_SPEEDUP_G : boolean := false;
       SIMULATION_G  : boolean := false;
-      NUM_TRIGS_G   : natural := 3;
+      NUM_TRIGS_G   : natural := 7;
       CLK_FEEDTHRU_G: boolean := false;
       XVC_EN_G      : boolean := false;
       NUM_SFPS_G    : natural := 1
@@ -64,23 +64,23 @@ entity TE0715 is
       FIXED_IO_ps_srstb : inout STD_LOGIC;
       timingRefClkP     : in  sl;
       timingRefClkN     : in  sl;
-      timingRxP         : in  sl;
-      timingRxN         : in  sl;
-      timingTxP         : out sl;
-      timingTxN         : out sl;
---      diffOutP          : out slv(NUM_TRIGS_G - 2 downto 0);
---      diffOutN          : out slv(NUM_TRIGS_G - 2 downto 0);
+      diffOutP          : out slv(NUM_TRIGS_G - 1 downto 0);
+      diffOutN          : out slv(NUM_TRIGS_G - 1 downto 0);
 --      diffInpP          : in  slv(0 downto 0) := (others => '0');
 --      diffInpN          : in  slv(0 downto 0) := (others => '1');
---      trigSE            : out slv(1 downto 0) := (others => '0');
---      timingRecClkP     : out sl;
---      timingRecClkN     : out sl;
+      timingRecClkP     : out sl;
+      timingRecClkN     : out sl;
 --      led               : out slv(0 downto 0)
 --      enableSFP         : out sl := '1';
-      sfp_tx_dis          : out slv(NUM_SFPS_G - 1 downto 0) := (others => '0');
-      sfp_tx_flt          : in  slv(NUM_SFPS_G - 1 downto 0);
-      sfp_los             : in  slv(NUM_SFPS_G - 1 downto 0);
-      sfp_presentb        : in  slv(NUM_SFPS_G - 1 downto 0)
+      sfpTxP            : out slv(NUM_SFPS_G - 1 downto 0) := (others => '0');
+      sfpTxN            : out slv(NUM_SFPS_G - 1 downto 0) := (others => '1');
+      sfpRxP            : in  slv(NUM_SFPS_G - 1 downto 0);
+      sfpRxN            : in  slv(NUM_SFPS_G - 1 downto 0);
+
+      sfp_tx_dis        : in  slv(NUM_SFPS_G - 1 downto 0) := (others => '0');
+      sfp_tx_flt        : in  slv(NUM_SFPS_G - 1 downto 0);
+      sfp_los           : in  slv(NUM_SFPS_G - 1 downto 0);
+      sfp_presentb      : in  slv(NUM_SFPS_G - 1 downto 0)
    );
 end TE0715;
 
@@ -408,10 +408,10 @@ begin
          timingRefClkN    => timingRefClkN,
          timingRecClk     => timingRecClk,
          timingRecRst     => open,
-         timingRxP        => timingRxP,
-         timingRxN        => timingRxN,
-         timingTxP        => timingTxP,
-         timingTxN        => timingTxN,
+         timingRxP        => sfpRxP(0),
+         timingRxN        => sfpRxN(0),
+         timingTxP        => sfpTxP(0),
+         timingTxN        => sfpTxN(0),
          timingTrig       => timingTrig,
          txRstStat        => open,
          rxRstStat        => open,
@@ -447,15 +447,15 @@ begin
 
    end generate;
 
---   GEN_OUTBUFDS : for i in diffOutP'left - FEEDTHRU_C downto 0 generate
---   begin
---      U_OBUFDS : component OBUFDS
---         port map (
---            I   => trigReg(i),
---            O   => diffOutP(i),
---            OB  => diffOutN(i)
---         );
---   end generate;
+   GEN_OUTBUFDS : for i in diffOutP'left - FEEDTHRU_C downto 0 generate
+   begin
+      U_OBUFDS : component OBUFDS
+         port map (
+            I   => trigReg(i),
+            O   => diffOutP(i),
+            OB  => diffOutN(i)
+         );
+   end generate;
 
 --   GEN_INPBUFDS : for i in diffInpP'range generate
 --      U_IBUFDS : component IBUFDS_GTE2
@@ -491,11 +491,6 @@ begin
 
 --   led(0) <= sl(rxDiv(27));
 
---   trigSE <= trigReg(trigReg'high downto diffOutP'high + 1);
---   trigSE <= timingTrig.trigPulse(trigReg'high downto diffOutP'high + 1);
---   trigSE(0)       <= timingRecClk;
---   trigSE(1)       <= recClk2(1);
-
    P_TRIG_REG : process ( timingTrig ) is
    begin
 --      if ( rising_edge( timingRecClk ) ) then
@@ -517,24 +512,24 @@ begin
          R   => '0'
       );
 
---   U_RECCLKBUF : component OBUFDS
---      port map (
---         I  => timingRecClkLoc,
---         O  => timingRecClkP,
---         OB => timingRecClkN
---      );
+   U_RECCLKBUF : component OBUFDS
+      port map (
+         I  => timingRecClkLoc,
+         O  => timingRecClkP,
+         OB => timingRecClkN
+      );
 
---   GEN_CLK_FEEDTHRU : if ( CLK_FEEDTHRU_G ) generate
---   begin
---
---   U_RECCLKBUF1 : component OBUFDS
---      port map (
---         I  => recClk2(0),
---         O  => diffOutP(diffOutP'left),
---         OB => diffOutN(diffOutN'left)
---      );
---
---   end generate;
+   GEN_CLK_FEEDTHRU : if ( CLK_FEEDTHRU_G ) generate
+   begin
+
+   U_RECCLKBUF17: component OBUFDS
+      port map (
+         I  => recClk2(0),
+         O  => diffOutP(diffOutP'left),
+         OB => diffOutN(diffOutN'left)
+      );
+
+   end generate;
    ----------------
    -- Misc. Signals
    ----------------

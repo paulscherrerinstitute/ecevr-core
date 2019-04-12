@@ -11,37 +11,49 @@
 #
 
 ##########################################################
+## SFP MGT0
+#set_property PACKAGE_PIN AA3     [get_ports {timingTxP}]
+#set_property PACKAGE_PIN AB3     [get_ports {timingTxN}]
+#set_property PACKAGE_PIN AA7     [get_ports {timingRxP}]
+#set_property PACKAGE_PIN AB7     [get_ports {timingRxN}]
+
 ## SFP MGT1
-set_property PACKAGE_PIN W4      [get_ports {timingTxP}]
-set_property PACKAGE_PIN Y4      [get_ports {timingTxN}]
-set_property PACKAGE_PIN W8      [get_ports {timingRxP}]
-set_property PACKAGE_PIN Y8      [get_ports {timingRxN}]
+set_property PACKAGE_PIN W4      [get_ports {sfpTxP[0]}]
+set_property PACKAGE_PIN Y4      [get_ports {sfpTxN[0]}]
+set_property PACKAGE_PIN W8      [get_ports {sfpRxP[0]}]
+set_property PACKAGE_PIN Y8      [get_ports {sfpRxN[0]}]
+
+## SFP MGT2
+#set_property PACKAGE_PIN AA5     [get_ports {sfpTxP[1]}]
+#set_property PACKAGE_PIN AB5     [get_ports {sfpTxN[1]}]
+#set_property PACKAGE_PIN AA9     [get_ports {sfpRxP[1]}]
+#set_property PACKAGE_PIN AB9     [get_ports {sfpRxN[1]}]
+
+## SFP MGT3
+#set_property PACKAGE_PIN W2      [get_ports {sfpTxP[2]}]
+#set_property PACKAGE_PIN Y2      [get_ports {sfpTxN[2]}]
+#set_property PACKAGE_PIN W6      [get_ports {sfpRxP[2]}]
+#set_property PACKAGE_PIN Y6      [get_ports {sfpRxN[2]}]
+
+## MGTREFCLK0 -- carrier
+set_property PACKAGE_PIN U9      [get_ports {timingRefClkP}]
+set_property PACKAGE_PIN V9      [get_ports {timingRefClkN}]
+
+# B34_L10_P
+set_property PACKAGE_PIN L2      [get_ports {timingRecClkP}]
+set_property IOSTANDARD  LVDS    [get_ports {timingRecClkP}]
+
+# B34_L10_N
+set_property PACKAGE_PIN L1      [get_ports {timingRecClkN}]
+set_property IOSTANDARD  LVDS    [get_ports {timingRecClkN}]
+
 ## MGTREFCLK1 -- Si5338
-set_property PACKAGE_PIN U5      [get_ports {timingRefClkP}]
-set_property PACKAGE_PIN V5      [get_ports {timingRefClkN}]
+#set_property PACKAGE_PIN U5      [get_ports {timingRefClkP}]
+#set_property PACKAGE_PIN V5      [get_ports {timingRefClkN}]
 ##########################################################
 # END SFP
 ##########################################################
 #
-# B13_L6_N
-set_property PACKAGE_PIN U14     [get_ports {sfp_tx_dis[0]}  ]
-set_property IOSTANDARD LVCMOS33 [get_ports {sfp_tx_dis[0]}  ]
-
-# B13_L6_P
-set_property PACKAGE_PIN U13     [get_ports {sfp_tx_flt[0]}  ]
-set_property IOSTANDARD LVCMOS33 [get_ports {sfp_tx_flt[0]}  ]
-set_property PULLUP     true     [get_ports {sfp_tx_flt[0]}  ]
-
-# B13_L4_N
-set_property PACKAGE_PIN W11     [get_ports {sfp_los[0]}     ]
-set_property IOSTANDARD LVCMOS33 [get_ports {sfp_los[0]}     ]
-set_property PULLUP     true     [get_ports {sfp_los[0]}     ]
-
-# B13_L4_P
-set_property PACKAGE_PIN V11     [get_ports {sfp_presentb[0]}]
-set_property IOSTANDARD LVCMOS33 [get_ports {sfp_presentb[0]}]
-set_property PULLUP     true     [get_ports {sfp_presentb[0]}]
-
 create_clock -name timingRefClk -period 5.3846 [get_ports {timingRefClkP}]
 create_clock -name timingTxClk  -period 5.385  [get_pins -hier -regexp {.*/GEN_TIMING.U_TimingGtx/.*/TXOUTCLK$}]
 create_clock -name timingRxClk  -period 5.385  [get_pins -hier -regexp {.*/GEN_TIMING.U_TimingGtx/.*/RXOUTCLK$}]
