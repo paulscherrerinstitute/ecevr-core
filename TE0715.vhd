@@ -89,7 +89,7 @@ architecture top_level of TE0715 is
   constant NUM_IRQS_C  : natural          := 1;
   constant CLK_FREQ_C  : real             := 33.0E6;
 
-  constant GEN_IC_C    : boolean          := true;
+  constant GEN_IC_C    : boolean          := false;
 
   constant FEEDTHRU_C  : natural          := ite( CLK_FEEDTHRU_G, 1, 0 );
 
