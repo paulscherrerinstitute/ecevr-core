@@ -2,8 +2,8 @@
 #set_property PACKAGE_PIN          V13 [get_ports {B13_L1_P}]
 #set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L1_P}]
 ## B13_L1_N
-#set_property PACKAGE_PIN          V14 [get_ports {B13_L1_N}]
-#set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L1_N}]
+set_property PACKAGE_PIN          V14 [get_ports {led[1]}]
+set_property IOSTANDARD      LVCMOS33 [get_ports {led[1]}]
 ## B13_L2_P
 #set_property PACKAGE_PIN          V15 [get_ports {B13_L2_P}]
 #set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L2_P}]
@@ -52,8 +52,8 @@ set_property IOSTANDARD       TMDS_33 [get_ports {diffOutP[0]}]
 set_property PACKAGE_PIN         AB12 [get_ports {diffOutN[0]}]
 set_property IOSTANDARD       TMDS_33 [get_ports {diffOutN[0]}]
 ## B13_L9_P
-#set_property PACKAGE_PIN         AB13 [get_ports {B13_L9_P}]
-#set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L9_P}]
+set_property PACKAGE_PIN         AB13 [get_ports {led[0]}]
+set_property IOSTANDARD      LVCMOS33 [get_ports {led[0]}]
 ## B13_L9_N
 #set_property PACKAGE_PIN         AB14 [get_ports {B13_L9_N}]
 #set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L9_N}]
@@ -113,11 +113,11 @@ set_property IOSTANDARD       TMDS_33 [get_ports {diffOutN[5]}]
 #set_property PACKAGE_PIN         AA20 [get_ports {B13_L18_N}]
 #set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L18_N}]
 ## B13_L19_P
-#set_property PACKAGE_PIN          R17 [get_ports {B13_L19_P}]
-#set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L19_P}]
+set_property PACKAGE_PIN          R17 [get_ports {resetOut}]
+set_property IOSTANDARD      LVCMOS33 [get_ports {resetOut}]
 ## B13_L19_N
-#set_property PACKAGE_PIN          T17 [get_ports {B13_L19_N}]
-#set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L19_N}]
+set_property PACKAGE_PIN          T17 [get_ports {resetInp}]
+set_property IOSTANDARD      LVCMOS33 [get_ports {resetInp}]
 ## B13_L20_P
 set_property PACKAGE_PIN          U19 [get_ports {diffOutP[4]}]
 set_property IOSTANDARD       TMDS_33 [get_ports {diffOutP[4]}]

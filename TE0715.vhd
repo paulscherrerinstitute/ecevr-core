@@ -62,15 +62,15 @@ entity TE0715 is
       FIXED_IO_ps_clk   : inout STD_LOGIC;
       FIXED_IO_ps_porb  : inout STD_LOGIC;
       FIXED_IO_ps_srstb : inout STD_LOGIC;
-      timingRefClkP     : in  sl;
-      timingRefClkN     : in  sl;
+      mgtRefClkP        : in  slv(1 downto 0);
+      mgtRefClkN        : in  slv(1 downto 0);
       diffOutP          : out slv(NUM_TRIGS_G - 1 downto 0);
       diffOutN          : out slv(NUM_TRIGS_G - 1 downto 0);
 --      diffInpP          : in  slv(0 downto 0) := (others => '0');
 --      diffInpN          : in  slv(0 downto 0) := (others => '1');
       timingRecClkP     : out sl;
       timingRecClkN     : out sl;
---      led               : out slv(0 downto 0)
+      led               : out slv(1 downto 0);
 --      enableSFP         : out sl := '1';
       sfpTxP            : out slv(NUM_SFPS_G - 1 downto 0) := (others => '0');
       sfpTxN            : out slv(NUM_SFPS_G - 1 downto 0) := (others => '1');
@@ -80,7 +80,9 @@ entity TE0715 is
       sfp_tx_dis        : in  slv(NUM_SFPS_G - 1 downto 0) := (others => '0');
       sfp_tx_flt        : in  slv(NUM_SFPS_G - 1 downto 0);
       sfp_los           : in  slv(NUM_SFPS_G - 1 downto 0);
-      sfp_presentb      : in  slv(NUM_SFPS_G - 1 downto 0)
+      sfp_presentb      : in  slv(NUM_SFPS_G - 1 downto 0);
+      resetOut          : inout sl;
+      resetInp          : in    sl
    );
 end TE0715;
 
@@ -95,7 +97,10 @@ architecture top_level of TE0715 is
 
 --  signal   diffInp     : slv(diffInpP'range);
 
---  signal   siClk       : sl;
+  signal   siClk       : sl;
+  signal   siClkLoc    : sl;
+
+  signal   outClk      : sl;
 
   signal   txDiv       : unsigned(27 downto 0) := to_unsigned(0, 28);
   signal   rxDiv       : unsigned(27 downto 0) := to_unsigned(0, 28);
@@ -404,8 +409,8 @@ begin
          mbRxMaster       => dbgRxMaster,
          mbRxSlave        => dbgRxSlave,
          -- Timing
-         timingRefClkP    => timingRefClkP,
-         timingRefClkN    => timingRefClkN,
+         timingRefClkP    => mgtRefClkP(1),
+         timingRefClkN    => mgtRefClkN(1),
          timingRecClk     => timingRecClk,
          timingRecRst     => open,
          timingRxP        => sfpRxP(0),
@@ -457,25 +462,33 @@ begin
          );
    end generate;
 
---   GEN_INPBUFDS : for i in diffInpP'range generate
---      U_IBUFDS : component IBUFDS_GTE2
---         port map (
---            I   => diffInpP(i),
---            IB  => diffInpN(i),
---            CEB => '0',
---            O   => diffInp(i)
---         );
---   end generate;
+   U_IBUFDS : component IBUFDS_GTE2
+      generic map (
+         CLKRCV_TRST      => true, -- ug476
+         CLKCM_CFG        => true, -- ug476
+         CLKSWING_CFG     => "11"  -- ug476
+      )
+      port map (
+         I                => mgtRefClkP(0),
+         IB               => mgtRefClkN(0),
+         CEB              => '0',
+         O                => siClkLoc,
+         ODIV2            => open
+      );
 
---   U_BUFG_SI : component BUFG
---      port map (
---         I   => diffInp(0),
---         O   => siClk
---      );
---
-   P_DIV_RX : process (timingRecClk) is
+   U_BUFG_SI : component BUFG
+      port map (
+         I   => siClkLoc,
+         O   => siClk
+      );
+
+     outClk <= '0';
+--   outClk <= siClk;
+--   outClk <= timingRecClk;
+
+   P_DIV_RX : process ( outClk ) is
    begin
-      if rising_edge( timingRecClk ) then
+      if rising_edge( outClk ) then
          rxDiv   <= rxDiv + 1;
          recClk2 <= not recClk2;
       end if;
@@ -489,11 +502,12 @@ begin
    end process P_DIV_TX;
 
 
---   led(0) <= sl(rxDiv(27));
+   led(0) <= sl(rxDiv(27));
+   led(1) <= sl(txDiv(27));
 
    P_TRIG_REG : process ( timingTrig ) is
    begin
---      if ( rising_edge( timingRecClk ) ) then
+--      if ( rising_edge( outClk ) ) then
          trigReg <= timingTrig.trigPulse(trigReg'range);
 --      end if;
    end process P_TRIG_REG;
@@ -503,7 +517,7 @@ begin
          DDR_CLK_EDGE => "SAME_EDGE"
       )
       port map (
-         C   => timingRecClk,
+         C   => outClk,
          CE  => '1',
          D1  => '0', -- sample on negative clock edge; FIXME should use MMCM and variable phase shift!
          D2  => '1',
@@ -533,4 +547,13 @@ begin
    ----------------
    -- Misc. Signals
    ----------------
+
+   U_RESETBUF : component IOBUF
+      port map (
+         I  => '0',
+         IO => resetOut,
+         O  => open,
+         T  => '1'
+      );
+
 end top_level;

@@ -36,8 +36,20 @@ set_property PACKAGE_PIN Y8      [get_ports {sfpRxN[0]}]
 #set_property PACKAGE_PIN Y6      [get_ports {sfpRxN[2]}]
 
 ## MGTREFCLK0 -- carrier
-set_property PACKAGE_PIN U9      [get_ports {timingRefClkP}]
-set_property PACKAGE_PIN V9      [get_ports {timingRefClkN}]
+set_property PACKAGE_PIN U9      [get_ports {mgtRefClkP[0]}]
+set_property PACKAGE_PIN V9      [get_ports {mgtRefClkN[0]}]
+
+## MGTREFCLK1 -- Si5338
+set_property PACKAGE_PIN U5      [get_ports {mgtRefClkP[1]}]
+set_property PACKAGE_PIN V5      [get_ports {mgtRefClkN[1]}]
+##########################################################
+# END SFP
+##########################################################
+#
+
+##########################################################
+# B34
+##########################################################
 
 # B34_L10_P
 set_property PACKAGE_PIN L2      [get_ports {timingRecClkP}]
@@ -47,13 +59,6 @@ set_property IOSTANDARD  LVDS    [get_ports {timingRecClkP}]
 set_property PACKAGE_PIN L1      [get_ports {timingRecClkN}]
 set_property IOSTANDARD  LVDS    [get_ports {timingRecClkN}]
 
-## MGTREFCLK1 -- Si5338
-#set_property PACKAGE_PIN U5      [get_ports {timingRefClkP}]
-#set_property PACKAGE_PIN V5      [get_ports {timingRefClkN}]
-##########################################################
-# END SFP
-##########################################################
-#
-create_clock -name timingRefClk -period 5.3846 [get_ports {timingRefClkP}]
-create_clock -name timingTxClk  -period 5.385  [get_pins -hier -regexp {.*/GEN_TIMING.U_TimingGtx/.*/TXOUTCLK$}]
-create_clock -name timingRxClk  -period 5.385  [get_pins -hier -regexp {.*/GEN_TIMING.U_TimingGtx/.*/RXOUTCLK$}]
+create_clock -name timingRefClk -period 5.3846 [get_ports {mgtRefClkP[0]}]
+create_clock -name timingTxClk  -period 5.385  [get_pins -hier -regexp {.*/GEN_TIMING.U_TimingGt/.*/TXOUTCLK$}]
+create_clock -name timingRxClk  -period 5.385  [get_pins -hier -regexp {.*/GEN_TIMING.U_TimingGt/.*/RXOUTCLK$}]
