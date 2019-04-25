@@ -19,15 +19,24 @@
 
 ## SFP MGT1
 set_property PACKAGE_PIN W4      [get_ports {sfpTxP[0]}]
+#set_property IO_BUFFER_TYPE NONE [get_ports {sfpTxP[0]}]
 set_property PACKAGE_PIN Y4      [get_ports {sfpTxN[0]}]
+#set_property IO_BUFFER_TYPE NONE [get_ports {sfpTxN[0]}]
 set_property PACKAGE_PIN W8      [get_ports {sfpRxP[0]}]
+#set_property IO_BUFFER_TYPE NONE [get_ports {sfpRxP[0]}]
 set_property PACKAGE_PIN Y8      [get_ports {sfpRxN[0]}]
+#set_property IO_BUFFER_TYPE NONE [get_ports {sfpRxN[0]}]
+
 
 ## SFP MGT2
-#set_property PACKAGE_PIN AA5     [get_ports {sfpTxP[1]}]
-#set_property PACKAGE_PIN AB5     [get_ports {sfpTxN[1]}]
-#set_property PACKAGE_PIN AA9     [get_ports {sfpRxP[1]}]
-#set_property PACKAGE_PIN AB9     [get_ports {sfpRxN[1]}]
+set_property PACKAGE_PIN AA5     [get_ports {sfpTxP[1]}]
+set_property IO_BUFFER_TYPE NONE [get_ports {sfpTxP[1]}]
+set_property PACKAGE_PIN AB5     [get_ports {sfpTxN[1]}]
+set_property IO_BUFFER_TYPE NONE [get_ports {sfpTxN[1]}]
+set_property PACKAGE_PIN AA9     [get_ports {sfpRxP[1]}]
+set_property IO_BUFFER_TYPE NONE [get_ports {sfpRxP[1]}]
+set_property PACKAGE_PIN AB9     [get_ports {sfpRxN[1]}]
+set_property IO_BUFFER_TYPE NONE [get_ports {sfpRxN[1]}]
 
 ## SFP MGT3
 #set_property PACKAGE_PIN W2      [get_ports {sfpTxP[2]}]
@@ -51,6 +60,10 @@ set_property PACKAGE_PIN V5      [get_ports {mgtRefClkN[1]}]
 # B34
 ##########################################################
 
+# IO_L9P_T1_DQS_34 -- Marvell PHY LED[0]
+set_property PACKAGE_PIN J3       [get_ports {gpIn[2]}]
+set_property IOSTANDARD  LVCMOS18 [get_ports {gpIn[2]}]
+
 # B34_L10_P
 set_property PACKAGE_PIN L2      [get_ports {timingRecClkP}]
 set_property IOSTANDARD  LVDS    [get_ports {timingRecClkP}]
@@ -59,6 +72,9 @@ set_property IOSTANDARD  LVDS    [get_ports {timingRecClkP}]
 set_property PACKAGE_PIN L1      [get_ports {timingRecClkN}]
 set_property IOSTANDARD  LVDS    [get_ports {timingRecClkN}]
 
-create_clock -name timingRefClk -period 5.3846 [get_ports {mgtRefClkP[0]}]
+create_clock -name timingRefClk -period 5.3846 [get_ports {mgtRefClkP[1]}]
 create_clock -name timingTxClk  -period 5.385  [get_pins -hier -regexp {.*/GEN_TIMING.U_TimingGt/.*/TXOUTCLK$}]
 create_clock -name timingRxClk  -period 5.385  [get_pins -hier -regexp {.*/GEN_TIMING.U_TimingGt/.*/RXOUTCLK$}]
+
+# Time it 
+create_clock -name si5344Clk    -period 5.3846 [get_ports {mgtRefClkP[0]}]

@@ -38,7 +38,9 @@ entity TE0715 is
       NUM_TRIGS_G   : natural := 7;
       CLK_FEEDTHRU_G: boolean := false;
       XVC_EN_G      : boolean := false;
-      NUM_SFPS_G    : natural := 1
+      NUM_SFPS_G    : natural := 2;
+      NUM_GP_IN_G   : natural := 3;
+      NUM_LED_G     : natural := 5
    );
    port (
       DDR_addr          : inout STD_LOGIC_VECTOR ( 14 downto 0 );
@@ -70,20 +72,30 @@ entity TE0715 is
 --      diffInpN          : in  slv(0 downto 0) := (others => '1');
       timingRecClkP     : out sl;
       timingRecClkN     : out sl;
-      led               : out slv(1 downto 0);
+      led               : out slv(NUM_LED_G - 1 downto 0);
+      -- led[0] -> green LED, D5 (board edge)
+      -- led[1] -> red LED, D4 (board edge)
+      -- led[2] -> yellow LED in eth connector
+      -- led[3] -> orange/anode - green/cathode in eth connector
+      -- led[4] -> orange/cathode - green/anode in eth connector
 --      enableSFP         : out sl := '1';
-      sfpTxP            : out slv(NUM_SFPS_G - 1 downto 0) := (others => '0');
-      sfpTxN            : out slv(NUM_SFPS_G - 1 downto 0) := (others => '1');
+      sfpTxP            : out slv(NUM_SFPS_G - 1 downto 0);
+      sfpTxN            : out slv(NUM_SFPS_G - 1 downto 0);
       sfpRxP            : in  slv(NUM_SFPS_G - 1 downto 0);
       sfpRxN            : in  slv(NUM_SFPS_G - 1 downto 0);
 
-      sfp_tx_dis        : in  slv(NUM_SFPS_G - 1 downto 0) := (others => '0');
+      sfp_tx_dis        : out slv(NUM_SFPS_G - 1 downto 0) := (others => '0');
       sfp_tx_flt        : in  slv(NUM_SFPS_G - 1 downto 0);
       sfp_los           : in  slv(NUM_SFPS_G - 1 downto 0);
       sfp_presentb      : in  slv(NUM_SFPS_G - 1 downto 0);
       resetOut          : inout sl;
-      resetInp          : in    sl
+      resetInp          : in    sl;
+      gpIn              : in    slv(NUM_GP_IN_G - 1 downto 0)
+      -- gpIn[0] -> Si5344 LOLb
+      -- gpIn[1] -> Si5344 INTRb
+      -- gpIn[2] -> Marvell Ethernet PHY LED[0]
    );
+
 end TE0715;
 
 architecture top_level of TE0715 is
@@ -104,16 +116,6 @@ architecture top_level of TE0715 is
 
   signal   txDiv       : unsigned(27 downto 0) := to_unsigned(0, 28);
   signal   rxDiv       : unsigned(27 downto 0) := to_unsigned(0, 28);
-
-component Ila_256 is
-    Port (
-      clk : in STD_LOGIC;
-      probe0 : in STD_LOGIC_VECTOR ( 63 downto 0 );
-      probe1 : in STD_LOGIC_VECTOR ( 63 downto 0 );
-      probe2 : in STD_LOGIC_VECTOR ( 63 downto 0 );
-      probe3 : in STD_LOGIC_VECTOR ( 63 downto 0 )
-    );
-end component Ila_256;
 
 component processing_system7_0
     PORT (
@@ -229,7 +231,6 @@ component processing_system7_0
    attribute IOB : string;
    attribute IOB of trigReg : signal is "TRUE";
    attribute IOB of recClk2 : signal is "TRUE";
-
 
 begin
 
@@ -482,9 +483,9 @@ begin
          O   => siClk
       );
 
-     outClk <= '0';
+--   outClk <= '0';
 --   outClk <= siClk;
---   outClk <= timingRecClk;
+     outClk <= timingRecClk;
 
    P_DIV_RX : process ( outClk ) is
    begin
@@ -502,8 +503,6 @@ begin
    end process P_DIV_TX;
 
 
-   led(0) <= sl(rxDiv(27));
-   led(1) <= sl(txDiv(27));
 
    P_TRIG_REG : process ( timingTrig ) is
    begin
@@ -555,5 +554,12 @@ begin
          O  => open,
          T  => '1'
       );
-
+   -- Green (board edge)
+   led(0) <= gpIn(0); -- LOLb
+   -- led(0) <= sl(rxDiv(27));
+   led(1) <= sl(txDiv(27));
+   -- Ethernet PHY LED[0]
+   led(2) <= gpIn(2);
+   led(3) <= '0';
+   led(4) <= '0';
 end top_level;

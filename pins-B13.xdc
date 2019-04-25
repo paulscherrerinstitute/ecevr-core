@@ -1,15 +1,15 @@
-## B13_L1_P
-#set_property PACKAGE_PIN          V13 [get_ports {B13_L1_P}]
-#set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L1_P}]
-## B13_L1_N
+# B13_L1_P - orange LED/cathode, green LED/anode in ethernet adapter
+set_property PACKAGE_PIN          V13 [get_ports {led[4]}]
+set_property IOSTANDARD      LVCMOS33 [get_ports {led[4]}]
+## B13_L1_N - D4 / red LED (board edge)
 set_property PACKAGE_PIN          V14 [get_ports {led[1]}]
 set_property IOSTANDARD      LVCMOS33 [get_ports {led[1]}]
-## B13_L2_P
-#set_property PACKAGE_PIN          V15 [get_ports {B13_L2_P}]
-#set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L2_P}]
-## B13_L2_N
-#set_property PACKAGE_PIN          W15 [get_ports {B13_L2_N}]
-#set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L2_N}]
+# B13_L2_P - yellow LED in ethernet adapter
+set_property PACKAGE_PIN          V15 [get_ports {led[2]}]
+set_property IOSTANDARD      LVCMOS33 [get_ports {led[2]}]
+# B13_L2_N - orange LED/anode green LED/cathode in ethernet adapter
+set_property PACKAGE_PIN          W15 [get_ports {led[3]}]
+set_property IOSTANDARD      LVCMOS33 [get_ports {led[3]}]
 ## B13_L3_P
 #set_property PACKAGE_PIN          W12 [get_ports {B13_L3_P}]
 #set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L3_P}]
@@ -38,32 +38,32 @@ set_property PACKAGE_PIN          U14 [get_ports {sfp_presentb[0]}]
 set_property IOSTANDARD      LVCMOS33 [get_ports {sfp_presentb[0]}]
 set_property PULLUP              true [get_ports {sfp_presentb[0]}]
 ## B13_L7_P
-#set_property PACKAGE_PIN         AA11 [get_ports {sfp_los[1]}]
-#set_property IOSTANDARD      LVCMOS33 [get_ports {sfp_los[1]}]
-#set_property PULLUP              true [get_ports {sfp_los[1]}]
+set_property PACKAGE_PIN         AA11 [get_ports {sfp_los[1]}]
+set_property IOSTANDARD      LVCMOS33 [get_ports {sfp_los[1]}]
+set_property PULLUP              true [get_ports {sfp_los[1]}]
 ## B13_L7_N
-#set_property PACKAGE_PIN         AB11 [get_ports {sfp_presentb[1]}]
-#set_property IOSTANDARD      LVCMOS33 [get_ports {sfp_presentb[1]}]
-#set_property PULLUP              true [get_ports {sfp_presentb[1]}]
+set_property PACKAGE_PIN         AB11 [get_ports {sfp_presentb[1]}]
+set_property IOSTANDARD      LVCMOS33 [get_ports {sfp_presentb[1]}]
+set_property PULLUP              true [get_ports {sfp_presentb[1]}]
 ## B13_L8_P
 set_property PACKAGE_PIN         AA12 [get_ports {diffOutP[0]}]
 set_property IOSTANDARD       TMDS_33 [get_ports {diffOutP[0]}]
 ## B13_L8_N
 set_property PACKAGE_PIN         AB12 [get_ports {diffOutN[0]}]
 set_property IOSTANDARD       TMDS_33 [get_ports {diffOutN[0]}]
-## B13_L9_P
+## B13_L9_P - D5 / green LED (board edge)
 set_property PACKAGE_PIN         AB13 [get_ports {led[0]}]
 set_property IOSTANDARD      LVCMOS33 [get_ports {led[0]}]
 ## B13_L9_N
 #set_property PACKAGE_PIN         AB14 [get_ports {B13_L9_N}]
 #set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L9_N}]
 ## B13_L10_P
-#set_property PACKAGE_PIN          Y12 [get_ports {sfp_tx_dis[1]}]
-#set_property IOSTANDARD      LVCMOS33 [get_ports {sfp_tx_dis[1]}]
+set_property PACKAGE_PIN          Y12 [get_ports {sfp_tx_dis[1]}]
+set_property IOSTANDARD      LVCMOS33 [get_ports {sfp_tx_dis[1]}]
 ## B13_L10_N
-#set_property PACKAGE_PIN          Y13 [get_ports {sfp_tx_flt[1]}]
-#set_property IOSTANDARD      LVCMOS33 [get_ports {sfp_tx_flt[1]}]
-#set_property PULLUP              true [get_ports {sfp_tx_flt[1]}]
+set_property PACKAGE_PIN          Y13 [get_ports {sfp_tx_flt[1]}]
+set_property IOSTANDARD      LVCMOS33 [get_ports {sfp_tx_flt[1]}]
+set_property PULLUP              true [get_ports {sfp_tx_flt[1]}]
 ## B13_L11_P
 #set_property PACKAGE_PIN         AA14 [get_ports {B13_L11_P}]
 #set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L11_P}]
@@ -76,9 +76,9 @@ set_property IOSTANDARD      LVCMOS33 [get_ports {led[0]}]
 ## B13_L12_N
 #set_property PACKAGE_PIN          Y15 [get_ports {B13_L12_N}]
 #set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L12_N}]
-## B13_L13_P
-#set_property PACKAGE_PIN          Y18 [get_ports {B13_L13_P}]
-#set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L13_P}]
+# B13_L13_P Si5344 INTRb
+set_property PACKAGE_PIN          Y18 [get_ports {gpIn[1]}]
+set_property IOSTANDARD      LVCMOS33 [get_ports {gpIn[1]}]
 ## B13_L13_N
 #set_property PACKAGE_PIN          Y19 [get_ports {B13_L13_N}]
 #set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L13_N}]
@@ -145,6 +145,6 @@ set_property IOSTANDARD       TMDS_33 [get_ports {diffOutN[1]}]
 ## B13_L24_P
 #set_property PACKAGE_PIN          W17 [get_ports {B13_L24_P}]
 #set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L24_P}]
-## B13_L24_N
-#set_property PACKAGE_PIN          Y17 [get_ports {B13_L24_N}]
-#set_property IOSTANDARD      LVCMOS33 [get_ports {B13_L24_N}]
+# B13_L24_N -- Si5344 LOLb
+set_property PACKAGE_PIN          Y17 [get_ports {gpIn[0]}]
+set_property IOSTANDARD      LVCMOS33 [get_ports {gpIn[0]}]
