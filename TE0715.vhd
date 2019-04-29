@@ -420,8 +420,8 @@ begin
          mbRxMaster       => dbgRxMaster,
          mbRxSlave        => dbgRxSlave,
          -- Timing
-         timingRefClkP    => mgtRefClkP(1),
-         timingRefClkN    => mgtRefClkN(1),
+         timingRefClkP    => mgtRefClkP(0),
+         timingRefClkN    => mgtRefClkN(0),
          timingRecClk     => timingRecClk,
          timingRecRst     => timingRecRst,
          timingRxP        => sfpRxP(0),
@@ -480,8 +480,8 @@ begin
          CLKSWING_CFG     => "11"  -- ug476
       )
       port map (
-         I                => mgtRefClkP(0),
-         IB               => mgtRefClkN(0),
+         I                => mgtRefClkP(1),
+         IB               => mgtRefClkN(1),
          CEB              => '0',
          O                => siClkLoc,
          ODIV2            => open
