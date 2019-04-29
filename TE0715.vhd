@@ -100,8 +100,9 @@ end TE0715;
 
 architecture top_level of TE0715 is
 
-  constant NUM_IRQS_C  : natural          := 1;
-  constant CLK_FREQ_C  : real             := 33.0E6;
+  -- must match CONFIG.PCW_NUM_F2P_INTR_INPUTS {16} setting for IP generation
+  constant NUM_IRQS_C  : natural          := 16;
+  constant CLK_FREQ_C  : real             := 50.0E6;
 
   constant GEN_IC_C    : boolean          := false;
 
