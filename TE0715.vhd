@@ -114,9 +114,15 @@ architecture top_level of TE0715 is
   signal   siClkLoc    : sl;
 
   signal   outClk      : sl;
+  signal   outRst      : sl;
 
   signal   txDiv       : unsigned(27 downto 0) := to_unsigned(0, 28);
   signal   rxDiv       : unsigned(27 downto 0) := to_unsigned(0, 28);
+
+  signal   rxLedData   : slv(1 downto 0);
+  signal   rxLedTimer  : unsigned(27 downto 0) := to_unsigned(0, 28);
+  signal   rxLedState  : sl := '0';
+  signal   rxClkState  : sl := rxDiv(27);
 
 component processing_system7_0
     PORT (
@@ -193,7 +199,6 @@ component processing_system7_0
    constant AXIS_SIZE_C : positive         := 1;
 
    constant AXIS_WIDTH_C    : positive     := 4;
-   constant FIFO_DEPTH_C    : natural      := 0; -- had removed the axiVlg submodule
 
    signal   sysClk          : sl;
    signal   sysRst          : sl;
@@ -222,7 +227,11 @@ component processing_system7_0
 
    signal   timingTrig      : TimingTrigType;
    signal   timingRecClk    : sl;
+   signal   timingRecRst    : sl;
    signal   timingRecClkLoc : sl;
+
+   signal   timingRxStat    : TimingPhyStatusType;
+   signal   timingTxStat    : TimingPhyStatusType;
 
    signal   timingTxClk     : sl;
 
@@ -389,8 +398,8 @@ begin
          USE_SLOWCLK_G    => true,
          TPGMINI_G        => true,
          GEN_TIMING_G     => true,
-         NUM_TRIGS_G      => NUM_TRIGS_G,
-         FIFO_DEPTH_G     => FIFO_DEPTH_C)
+         NUM_TRIGS_G      => NUM_TRIGS_G
+      )
       port map (
          -- Clock and Reset
          clk              => sysClk,
@@ -414,14 +423,14 @@ begin
          timingRefClkP    => mgtRefClkP(1),
          timingRefClkN    => mgtRefClkN(1),
          timingRecClk     => timingRecClk,
-         timingRecRst     => open,
+         timingRecRst     => timingRecRst,
          timingRxP        => sfpRxP(0),
          timingRxN        => sfpRxN(0),
          timingTxP        => sfpTxP(0),
          timingTxN        => sfpTxN(0),
          timingTrig       => timingTrig,
-         txRstStat        => open,
-         rxRstStat        => open,
+         timingRxStat     => timingRxStat,
+         timingTxStat     => timingTxStat,
          timingTxClk      => timingTxClk,
          -- ADC Ports
          vPIn             => '0',
@@ -484,15 +493,19 @@ begin
          O   => siClk
       );
 
---   outClk <= '0';
---   outClk <= siClk;
      outClk <= timingRecClk;
+     outRst <= timingRecRst;
 
    P_DIV_RX : process ( outClk ) is
    begin
       if rising_edge( outClk ) then
-         rxDiv   <= rxDiv + 1;
-         recClk2 <= not recClk2;
+         if ( outRst = '1' ) then
+            rxDiv   <= to_unsigned( 0, rxDiv'length );
+            recClk2 <= "00";
+         else
+            rxDiv   <= rxDiv + 1;
+            recClk2 <= not recClk2;
+         end if;
       end if;
    end process P_DIV_RX;
 
@@ -555,12 +568,63 @@ begin
          O  => open,
          T  => '1'
       );
+
+   U_SYNC_RX_LED : entity work.SynchronizerVector
+      generic map (
+         WIDTH_G => 2
+      )
+      port map (
+         clk       => sysClk,
+         rst       => sysRst,
+         dataIn(0) => gpIn(0),
+         dataIn(1) => rxDiv(27),
+         dataOut   => rxLedData
+      );
+
+   P_RX_LED : process ( sysClk ) is
+   begin
+
+      if ( rising_edge( sysClk ) ) then
+
+         if ( sysRst = '1' ) then
+            rxLedTimer <= to_unsigned(0, rxLedTimer'length);
+            rxLedState <= '0';
+            rxClkState <= '0';
+         else
+            rxClkState <= rxLedData(1);
+
+            if ( rxLedData(0) = '1' ) then
+               -- PLL locked
+               rxLedState <= '1';
+               rxLedTimer <= to_unsigned(0, rxLedTimer'length);
+            else
+               if ( rxLedTimer /= 0 ) then
+                  rxLedTimer <= rxLedTimer - 1;
+               elsif ( rxDiv(27) = '1' and rxClkState = '0' ) then
+                  rxLedTimer <= to_unsigned(10000000, rxLedTimer'length); -- 0.2s
+                  rxLedState <= '1';
+               else
+                  rxLedState <= '0';
+               end if;
+            end if;
+         end if;
+      end if;
+   end process P_RX_LED;
+
    -- Green (board edge)
-   led(0) <= gpIn(0); -- LOLb
+   -- If Si5344 locked: steady green - else blink if recovered RX clock is active
+   led(0) <= rxLedState;
    -- led(0) <= sl(rxDiv(27));
-   led(1) <= sl(txDiv(27));
-   -- Ethernet PHY LED[0]
-   led(2) <= gpIn(2);
-   led(3) <= '0';
-   led(4) <= '0';
+   led(1) <= not timingRxStat.locked;
+   -- Ethernet PHY LED[0] -- unfortunately this LED is
+   -- virtually disconnected on the TE0715 module. There
+   -- is a level translator (U21) with /OE tied to VCC
+   -- which basically bricks it...
+   -- led(2) <= gpIn(2);
+
+   -- led(2) is the yellow lED in the ethernet connector
+   led(2) <= '0';
+   -- led(3) and (4) are anti-parallel green/orange LEDs in the ethernet connector
+   led(3) <= sl(txDiv(27));
+   led(4) <= not sl(txDiv(27));
 end top_level;
