@@ -38,7 +38,7 @@ entity TE0715 is
       NUM_TRIGS_G   : natural := 7;
       CLK_FEEDTHRU_G: boolean := false;
       XVC_EN_G      : boolean := false;
-      NUM_SFPS_G    : natural := 2;
+      NUM_SFPS_G    : natural := 4; --2;
       NUM_GP_IN_G   : natural := 3;
       NUM_LED_G     : natural := 5
    );
@@ -108,6 +108,12 @@ architecture top_level of TE0715 is
 
   constant FEEDTHRU_C  : natural          := ite( CLK_FEEDTHRU_G, 1, 0 );
 
+  constant TIMING_UDP_PORT_C : natural    := 8197;
+
+  constant ETH_MAC_C   : slv(47 downto 0) := x"010300564400";  -- 00:44:56:00:03:01 (ETH only)
+
+  constant IBERT_C     : boolean          := false;
+
 --  signal   diffInp     : slv(diffInpP'range);
 
   signal   siClk       : sl;
@@ -123,6 +129,19 @@ architecture top_level of TE0715 is
   signal   rxLedTimer  : unsigned(27 downto 0) := to_unsigned(0, 28);
   signal   rxLedState  : sl := '0';
   signal   rxClkState  : sl := rxDiv(27);
+
+COMPONENT ibert_7series_gtx_0
+  PORT (
+    TXN_O : OUT STD_LOGIC_VECTOR(3 DOWNTO 0);
+    TXP_O : OUT STD_LOGIC_VECTOR(3 DOWNTO 0);
+    RXOUTCLK_O : OUT STD_LOGIC;
+    RXN_I : IN STD_LOGIC_VECTOR(3 DOWNTO 0);
+    RXP_I : IN STD_LOGIC_VECTOR(3 DOWNTO 0);
+    GTREFCLK0_I : IN STD_LOGIC_VECTOR(0 DOWNTO 0);
+    GTREFCLK1_I : IN STD_LOGIC_VECTOR(0 DOWNTO 0);
+    SYSCLK_I : IN STD_LOGIC
+  );
+END COMPONENT;
 
 component processing_system7_0
     PORT (
@@ -233,10 +252,17 @@ component processing_system7_0
    signal   timingRxStat    : TimingPhyStatusType;
    signal   timingTxStat    : TimingPhyStatusType;
 
+   signal   timingObMaster  : AxiStreamMasterType    := AXI_STREAM_MASTER_INIT_C;
+   signal   timingObSlave   : AxiStreamSlaveType     := AXI_STREAM_SLAVE_FORCE_C;
+   signal   timingIbMaster  : AxiStreamMasterType    := AXI_STREAM_MASTER_INIT_C;
+   signal   timingIbSlave   : AxiStreamSlaveType     := AXI_STREAM_SLAVE_FORCE_C;
+
    signal   timingTxClk     : sl;
 
    signal   trigReg         : slv(NUM_TRIGS_G - 1 downto 0);
    signal   recClk2         : slv(1 downto 0) := "00";
+
+   signal   refClkDbg       : slv(1 downto 0);
 
    attribute IOB : string;
    attribute IOB of trigReg : signal is "TRUE";
@@ -317,27 +343,28 @@ begin
          USB0_VBUS_PWRSELECT           => open
       );
 
+   G_COMM : if ( not IBERT_C ) generate
+
    -- axiReadSlave  <= AXI_READ_SLAVE_FORCE_C;
    -- axiWriteSlave <= AXI_WRITE_SLAVE_FORCE_C;
 
-   U_Ila_Axi : entity work.IlaAxi4SurfWrapper
-      port map (
-          axiClk                      => sysClk,
-          axiRst                      => sysRst,
-          axiReadMaster               => axiReadMaster,
-          axiReadSlave                => axiReadSlave,
-          axiWriteMaster              => axiWriteMaster,
-          axiWriteSlave               => axiWriteSlave
-      );
+--   U_Ila_Axi : entity work.IlaAxi4SurfWrapper
+--      port map (
+--          axiClk                      => sysClk,
+--          axiRst                      => sysRst,
+--          axiReadMaster               => axiReadMaster,
+--          axiReadSlave                => axiReadSlave,
+--          axiWriteMaster              => axiWriteMaster,
+--          axiWriteSlave               => axiWriteSlave
+--      );
 
-   U_Ila_Axil : entity work.IlaAxilSurfWrapper
+   U_Ila_Axil : entity work.IlaAxiLite
       port map (
-          axilClk                     => sysClk,
-          axilRst                     => sysRst,
-          axilReadMaster              => axilReadMaster,
-          axilReadSlave               => axilReadSlave,
-          axilWriteMaster             => axilWriteMaster,
-          axilWriteSlave              => axilWriteSlave
+          axilClk                => sysClk,
+          mAxilRead              => axilReadMaster,
+          sAxilRead              => axilReadSlave,
+          mAxilWrite             => axilWriteMaster,
+          sAxilWrite             => axilWriteSlave
       );
 
    GEN_INTERCONNECT : if ( GEN_IC_C ) generate
@@ -391,58 +418,163 @@ begin
    -------------------
    U_Reg : entity work.AppReg
       generic map (
-         TPD_G            => TPD_G,
-         BUILD_INFO_G     => BUILD_INFO_G,
-         XIL_DEVICE_G     => "7SERIES",
-         AXIL_BASE_ADDR_G => x"40000000",
-         USE_SLOWCLK_G    => true,
-         TPGMINI_G        => true,
-         GEN_TIMING_G     => true,
-         NUM_TRIGS_G      => NUM_TRIGS_G
+         TPD_G                => TPD_G,
+         BUILD_INFO_G         => BUILD_INFO_G,
+         XIL_DEVICE_G         => "7SERIES",
+         AXIL_BASE_ADDR_G     => x"40000000",
+         USE_SLOWCLK_G        => true,
+         TPGMINI_G            => true,
+         GEN_TIMING_G         => true,
+         TIMING_UDP_MSG_G     => true,
+         NUM_TRIGS_G          => NUM_TRIGS_G
       )
       port map (
          -- Clock and Reset
-         clk              => sysClk,
-         rst              => sysRst,
+         clk                  => sysClk,
+         rst                  => sysRst,
          -- AXI-Lite interface
-         axilWriteMaster  => axilWriteMaster,
-         axilWriteSlave   => axilWriteSlave,
-         axilReadMaster   => axilReadMaster,
-         axilReadSlave    => axilReadSlave,
+         axilWriteMaster      => axilWriteMaster,
+         axilWriteSlave       => axilWriteSlave,
+         axilReadMaster       => axilReadMaster,
+         axilReadSlave        => axilReadSlave,
          -- PBRS Interface
-         pbrsTxMaster     => open,
-         pbrsTxSlave      => AXI_STREAM_SLAVE_FORCE_C,
-         pbrsRxMaster     => AXI_STREAM_MASTER_INIT_C,
-         pbrsRxSlave      => open,
+         pbrsTxMaster         => open,
+         pbrsTxSlave          => AXI_STREAM_SLAVE_FORCE_C,
+         pbrsRxMaster         => AXI_STREAM_MASTER_INIT_C,
+         pbrsRxSlave          => open,
          -- Microblaze stream
-         mbTxMaster       => dbgTxMaster,
-         mbTxSlave        => dbgTxSlave,
-         mbRxMaster       => dbgRxMaster,
-         mbRxSlave        => dbgRxSlave,
+         mbTxMaster           => dbgTxMaster,
+         mbTxSlave            => dbgTxSlave,
+         mbRxMaster           => dbgRxMaster,
+         mbRxSlave            => dbgRxSlave,
          -- Timing
-         timingRefClkP    => mgtRefClkP(0),
-         timingRefClkN    => mgtRefClkN(0),
-         timingRecClk     => timingRecClk,
-         timingRecRst     => timingRecRst,
-         timingRxP        => sfpRxP(0),
-         timingRxN        => sfpRxN(0),
-         timingTxP        => sfpTxP(0),
-         timingTxN        => sfpTxN(0),
-         timingTrig       => timingTrig,
-         timingRxStat     => timingRxStat,
-         timingTxStat     => timingTxStat,
-         timingTxClk      => timingTxClk,
+         timingRefClkP        => mgtRefClkP(0),
+         timingRefClkN        => mgtRefClkN(0),
+         timingRecClk         => timingRecClk,
+         timingRecRst         => timingRecRst,
+         timingRxP            => sfpRxP(0),
+         timingRxN            => sfpRxN(0),
+         timingTxP            => sfpTxP(0),
+         timingTxN            => sfpTxN(0),
+         timingTrig           => timingTrig,
+         timingRxStat         => timingRxStat,
+         timingTxStat         => timingTxStat,
+         timingTxClk          => timingTxClk,
+         ibTimingEthMsgMaster => timingIbMaster,
+         ibTimingEthMsgSlave  => timingIbSlave,
+         obTimingEthMsgMaster => timingObMaster,
+         obTimingEthMsgSlave  => timingObSlave,
          -- ADC Ports
-         vPIn             => '0',
-         vNIn             => '0',
-         irqOut           => appIrqs
+         vPIn                 => '0',
+         vNIn                 => '0',
+         irqOut               => appIrqs
       );
+
+   GEN_TIMING_UDP : if ( TIMING_UDP_PORT_C /= 0 ) generate
+
+      signal ethTxMaster, ethRxMaster : AxiStreamMasterType;
+      signal ethTxSlave , ethRxSlave  : AxiStreamSlaveType;
+
+   begin
+
+   U_PL_ETH_GTX : entity work.GigEthGtx7Wrapper
+      generic map (
+         TPD_G               => TPD_G,
+         -- Clocking Configurations
+         USE_GTREFCLK_G      => true, --  FALSE: gtClkP/N,  TRUE: gtRefClk
+         -- AXI-Lite Configurations
+         EN_AXI_REG_G        => false,
+         -- AXI Streaming Configurations
+         AXIS_CONFIG_G       => (others => EMAC_AXIS_CONFIG_C)
+      )
+      port map (
+         -- Local Configurations
+         localMac(0)         => ETH_MAC_C,
+         -- Streaming DMA Interface
+         dmaClk(0)           => sysClk,
+         dmaRst(0)           => sysRst,
+         dmaIbMasters(0)     => ethTxMaster,
+         dmaIbSlaves (0)     => ethTxSlave,
+         dmaObMasters(0)     => ethRxMaster,
+         dmaObSlaves (0)     => ethRxSlave,
+--         -- Slave AXI-Lite Interface
+--         axiLiteClk          : in  slv(NUM_LANE_G-1 downto 0)                     := (others => '0');
+--         axiLiteRst          : in  slv(NUM_LANE_G-1 downto 0)                     := (others => '0');
+--         axiLiteReadMasters  : in  AxiLiteReadMasterArray(NUM_LANE_G-1 downto 0)  := (others => AXI_LITE_READ_MASTER_INIT_C);
+--         axiLiteReadSlaves   : out AxiLiteReadSlaveArray(NUM_LANE_G-1 downto 0);
+--         axiLiteWriteMasters : in  AxiLiteWriteMasterArray(NUM_LANE_G-1 downto 0) := (others => AXI_LITE_WRITE_MASTER_INIT_C);
+--         axiLiteWriteSlaves  : out AxiLiteWriteSlaveArray(NUM_LANE_G-1 downto 0);
+         -- Misc. Signals
+         extRst              => sysRst,
+         phyClk              => open,
+         phyRst              => open,
+--         phyReady            : out slv(NUM_LANE_G-1 downto 0);
+--         sigDet              : in  slv(NUM_LANE_G-1 downto 0)                     := (others => '1');
+         -- MGT Clock Port (125.00 MHz or 250.0 MHz)
+         gtRefClk            => siClk,
+--         gtClkP              : in  sl                                             := '1';
+--         gtClkN              : in  sl                                             := '0';
+         -- MGT Ports
+         gtTxP(0)            => sfpTxP(1),
+         gtTxN(0)            => sfpTxN(1),
+         gtRxP(0)            => sfpRxP(1),
+         gtRxN(0)            => sfpRxN(1)
+      );
+
+   U_PL_ETH : entity work.EthPortMapping
+      generic map (
+         TPD_G           => TPD_G,
+         CLK_FREQUENCY_G => 125.0E+6,
+         MAC_ADDR_G      => ETH_MAC_C,
+         IP_ADDR_G       => x"0A02A8C0",  -- 192.168.2.10 (ETH only)
+         DHCP_G          => true,
+         JUMBO_G         => false,
+         USE_RSSI_G      => false,
+         USE_JTAG_G      => false,
+         USER_UDP_PORT_G => TIMING_UDP_PORT_C
+      )
+      port map (
+         -- Clock and Reset
+         clk             => sysClk,
+         rst             => sysRst,
+         -- ETH interface
+         txMaster        => ethTxMaster,
+         txSlave         => ethTxSlave,
+         rxMaster        => ethRxMaster,
+         rxSlave         => ethRxSlave,
+--         rxCtrl          : out AxiStreamCtrlType; -- unused
+--         -- PBRS Interface
+--         pbrsTxMaster    : in  AxiStreamMasterType := AXI_STREAM_MASTER_INIT_C;
+--         pbrsTxSlave     : out AxiStreamSlaveType  := AXI_STREAM_SLAVE_FORCE_C;
+--         pbrsRxMaster    : out AxiStreamMasterType := AXI_STREAM_MASTER_INIT_C;
+--         pbrsRxSlave     : in  AxiStreamSlaveType  := AXI_STREAM_SLAVE_FORCE_C;
+--         -- HLS Interface
+--         hlsTxMaster     : in  AxiStreamMasterType := AXI_STREAM_MASTER_INIT_C;
+--         hlsTxSlave      : out AxiStreamSlaveType  := AXI_STREAM_SLAVE_FORCE_C;
+--         hlsRxMaster     : out AxiStreamMasterType := AXI_STREAM_MASTER_INIT_C;
+--         hlsRxSlave      : in  AxiStreamSlaveType  := AXI_STREAM_SLAVE_FORCE_C;
+--         -- MB Interface
+--         mbTxMaster      : in  AxiStreamMasterType := AXI_STREAM_MASTER_INIT_C;
+--         mbTxSlave       : out AxiStreamSlaveType  := AXI_STREAM_SLAVE_FORCE_C;
+         -- raw UDP Interface
+         udpTxMaster     => timingObMaster,
+         udpTxSlave      => timingObSlave,
+         udpRxMaster     => timingIbMaster,
+         udpRxSlave      => timingIbSlave
+--         -- AXI-Lite MASTER Interface
+--         axilWriteMaster : out AxiLiteWriteMasterType := AXI_LITE_WRITE_MASTER_INIT_C;
+--         axilWriteSlave  : in  AxiLiteWriteSlaveType  := AXI_LITE_WRITE_SLAVE_INIT_C;
+--         axilReadMaster  : out AxiLiteReadMasterType  := AXI_LITE_READ_MASTER_INIT_C;
+--         axilReadSlave   : in  AxiLiteReadSlaveType   := AXI_LITE_READ_SLAVE_INIT_C
+      );
+
+   end generate; -- if TIMING_UDP_PORT_C /= 0
 
    cpuIrqs(IRQ_MAX_C - 1 downto 0) <= appIrqs(IRQ_MAX_C - 1 downto 0);
 
    GEN_XVC : if XVC_EN_G generate
 
-   U_AxisBscan : entity work.AxisDebugBridge
+   U_AxisBscan : entity work.AxisJtagDebugBridge
       generic map (
          TPD_G        => TPD_G,
          AXIS_WIDTH_G => 4,
@@ -627,4 +759,63 @@ begin
    -- led(3) and (4) are anti-parallel green/orange LEDs in the ethernet connector
    led(3) <= sl(txDiv(27));
    led(4) <= not sl(txDiv(27));
+
+   end generate; -- if not IBERT_C
+
+   GEN_IBERT : if ( IBERT_C ) generate
+
+   GEN_BUFS : for i in 1 downto 0 generate
+     signal wxx : sl;
+   begin
+   U_IBUFDS : component IBUFDS_GTE2
+      generic map (
+         CLKRCV_TRST      => true, -- ug476
+         CLKCM_CFG        => true, -- ug476
+         CLKSWING_CFG     => "11"  -- ug476
+      )
+      port map (
+         I                => mgtRefClkP(i),
+         IB               => mgtRefClkN(i),
+         CEB              => '0',
+         O                => refClkDbg(i),
+         ODIV2            => open
+      );
+
+--   U_BUFG_SI : component BUFG
+--      port map (
+--         I   => wxx,
+--         O   => refClkDbg(i)
+--      );
+   end generate;
+
+   your_instance_name : ibert_7series_gtx_0
+  PORT MAP (
+    TXN_O => sfpTxN,
+    TXP_O => sfpTxP,
+    RXOUTCLK_O => open,
+    RXN_I => sfpRxN,
+    RXP_I => sfpRxP,
+    GTREFCLK0_I(0) => refClkDbg(0),
+    GTREFCLK1_I(0) => refClkDbg(1),
+    SYSCLK_I => sysClk
+  );
+
+  GEN_OUTBUFDS : for i in diffOutP'left - FEEDTHRU_C downto 0 generate
+   begin
+      U_OBUFDS : component OBUFDS
+         port map (
+            I   => '0',
+            O   => diffOutP(i),
+            OB  => diffOutN(i)
+         );
+   end generate;
+   U_RECCLKBUF : component OBUFDS
+      port map (
+         I  => '0',
+         O  => timingRecClkP,
+         OB => timingRecClkN
+      );
+
+   end generate;
+
 end top_level;
