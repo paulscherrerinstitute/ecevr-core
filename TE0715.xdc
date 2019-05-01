@@ -30,13 +30,13 @@ set_property PACKAGE_PIN Y8      [get_ports {sfpRxN[0]}]
 
 ## SFP MGT2
 set_property PACKAGE_PIN AA5     [get_ports {sfpTxP[1]}]
-set_property IO_BUFFER_TYPE NONE [get_ports {sfpTxP[1]}]
+#set_property IO_BUFFER_TYPE NONE [get_ports {sfpTxP[1]}]
 set_property PACKAGE_PIN AB5     [get_ports {sfpTxN[1]}]
-set_property IO_BUFFER_TYPE NONE [get_ports {sfpTxN[1]}]
+#set_property IO_BUFFER_TYPE NONE [get_ports {sfpTxN[1]}]
 set_property PACKAGE_PIN AA9     [get_ports {sfpRxP[1]}]
-set_property IO_BUFFER_TYPE NONE [get_ports {sfpRxP[1]}]
+#set_property IO_BUFFER_TYPE NONE [get_ports {sfpRxP[1]}]
 set_property PACKAGE_PIN AB9     [get_ports {sfpRxN[1]}]
-set_property IO_BUFFER_TYPE NONE [get_ports {sfpRxN[1]}]
+#set_property IO_BUFFER_TYPE NONE [get_ports {sfpRxN[1]}]
 
 ## SFP MGT3
 #set_property PACKAGE_PIN W2      [get_ports {sfpTxP[2]}]
@@ -77,4 +77,4 @@ create_clock -name timingTxClk  -period 5.385  [get_pins -hier -regexp {.*/GEN_T
 create_clock -name timingRxClk  -period 5.385  [get_pins -hier -regexp {.*/GEN_TIMING.U_TimingGt/.*/RXOUTCLK$}]
 
 # Time it 
-create_clock -name si5338Clk    -period 5.3846 [get_ports {mgtRefClkP[1]}]
+create_clock -name si5338Clk    -period 8.000  [get_ports {mgtRefClkP[1]}]
