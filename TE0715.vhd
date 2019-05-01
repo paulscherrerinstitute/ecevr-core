@@ -38,7 +38,8 @@ entity TE0715 is
       NUM_TRIGS_G   : natural := 7;
       CLK_FEEDTHRU_G: boolean := false;
       XVC_EN_G      : boolean := false;
-      NUM_SFPS_G    : natural := 4; --2;
+      IBERT_G       : boolean := false; -- adapt NUM_SFPS_G
+      NUM_SFPS_G    : natural := 2;
       NUM_GP_IN_G   : natural := 3;
       NUM_LED_G     : natural := 5
    );
@@ -111,8 +112,6 @@ architecture top_level of TE0715 is
   constant TIMING_UDP_PORT_C : natural    := 8197;
 
   constant ETH_MAC_C   : slv(47 downto 0) := x"010300564400";  -- 00:44:56:00:03:01 (ETH only)
-
-  constant IBERT_C     : boolean          := false;
 
 --  signal   diffInp     : slv(diffInpP'range);
 
@@ -343,7 +342,7 @@ begin
          USB0_VBUS_PWRSELECT           => open
       );
 
-   G_COMM : if ( not IBERT_C ) generate
+   G_COMM : if ( not IBERT_G ) generate
 
    -- axiReadSlave  <= AXI_READ_SLAVE_FORCE_C;
    -- axiWriteSlave <= AXI_WRITE_SLAVE_FORCE_C;
@@ -760,9 +759,9 @@ begin
    led(3) <= sl(txDiv(27));
    led(4) <= not sl(txDiv(27));
 
-   end generate; -- if not IBERT_C
+   end generate; -- if not IBERT_G
 
-   GEN_IBERT : if ( IBERT_C ) generate
+   GEN_IBERT : if ( IBERT_G ) generate
 
    GEN_BUFS : for i in 1 downto 0 generate
      signal wxx : sl;
@@ -816,6 +815,6 @@ begin
          OB => timingRecClkN
       );
 
-   end generate;
+   end generate; -- if IBERT_G
 
 end top_level;
