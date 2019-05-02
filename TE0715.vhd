@@ -111,7 +111,7 @@ architecture top_level of TE0715 is
 
   constant TIMING_UDP_PORT_C : natural    := 8197;
 
-  constant ETH_MAC_C   : slv(47 downto 0) := x"010300564400";  -- 00:44:56:00:03:01 (ETH only)
+  constant ETH_MAC_C   : slv(47 downto 0) := x"aa0300564400";  -- 00:44:56:00:03:01 (ETH only)
 
 --  signal   diffInp     : slv(diffInpP'range);
 
@@ -525,7 +525,7 @@ begin
          TPD_G           => TPD_G,
          CLK_FREQUENCY_G => 125.0E+6,
          MAC_ADDR_G      => ETH_MAC_C,
-         IP_ADDR_G       => x"0A02A8C0",  -- 192.168.2.10 (ETH only)
+         IP_ADDR_G       => x"410AA8C0",  -- 192.168.2.10 (ETH only)
          DHCP_G          => true,
          JUMBO_G         => false,
          USE_RSSI_G      => false,
