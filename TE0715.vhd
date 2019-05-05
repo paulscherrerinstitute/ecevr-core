@@ -113,6 +113,8 @@ architecture top_level of TE0715 is
 
   constant ETH_MAC_C   : slv(47 downto 0) := x"aa0300564400";  -- 00:44:56:00:03:01 (ETH only)
 
+  constant NUM_AXI_SLV_C : natural        := 1;
+
 --  signal   diffInp     : slv(diffInpP'range);
 
   signal   siClk       : sl;
@@ -128,6 +130,8 @@ architecture top_level of TE0715 is
   signal   rxLedTimer  : unsigned(27 downto 0) := to_unsigned(0, 28);
   signal   rxLedState  : sl := '0';
   signal   rxClkState  : sl := rxDiv(27);
+
+  signal   dbgTrig     : slv(3 downto 0);
 
 COMPONENT ibert_7series_gtx_0
   PORT (
@@ -242,6 +246,11 @@ component processing_system7_0
    signal   dbgTxSlave      : AxiStreamSlaveType     := AXI_STREAM_SLAVE_FORCE_C;
    signal   dbgRxMaster     : AxiStreamMasterType    := AXI_STREAM_MASTER_INIT_C;
    signal   dbgRxSlave      : AxiStreamSlaveType;
+
+   signal   axilReadMasters : AxiLiteReadMasterArray (NUM_AXI_SLV_C - 1 downto 0) := (others => AXI_LITE_READ_MASTER_INIT_C);
+   signal   axilWriteMasters: AxiLiteWriteMasterArray(NUM_AXI_SLV_C - 1 downto 0) := (others => AXI_LITE_WRITE_MASTER_INIT_C);
+   signal   axilReadSlaves  : AxiLiteReadSlaveArray  (NUM_AXI_SLV_C - 1 downto 0) := (others => AXI_LITE_READ_SLAVE_INIT_C);
+   signal   axilWriteSlaves : AxiLiteWriteSlaveArray (NUM_AXI_SLV_C - 1 downto 0) := (others => AXI_LITE_WRITE_SLAVE_INIT_C);
 
    signal   timingTrig      : TimingTrigType;
    signal   timingRecClk    : sl;
@@ -425,6 +434,7 @@ begin
          TPGMINI_G            => true,
          GEN_TIMING_G         => true,
          TIMING_UDP_MSG_G     => true,
+         NUM_EXT_SLAVES_G     => NUM_AXI_SLV_C,
          NUM_TRIGS_G          => NUM_TRIGS_G
       )
       port map (
@@ -466,7 +476,13 @@ begin
          -- ADC Ports
          vPIn                 => '0',
          vNIn                 => '0',
-         irqOut               => appIrqs
+         irqOut               => appIrqs,
+
+         -- Slaves
+         axilReadMasters      => axilReadMasters,
+         axilReadSlaves       => axilReadSlaves,
+         axilWriteMasters     => axilWriteMasters,
+         axilWriteSlaves      => axilWriteSlaves
       );
 
    GEN_TIMING_UDP : if ( TIMING_UDP_PORT_C /= 0 ) generate
@@ -482,7 +498,7 @@ begin
          -- Clocking Configurations
          USE_GTREFCLK_G      => true, --  FALSE: gtClkP/N,  TRUE: gtRefClk
          -- AXI-Lite Configurations
-         EN_AXI_REG_G        => false,
+         EN_AXI_REG_G        => true,
          -- AXI Streaming Configurations
          AXIS_CONFIG_G       => (others => EMAC_AXIS_CONFIG_C)
       )
@@ -492,17 +508,17 @@ begin
          -- Streaming DMA Interface
          dmaClk(0)           => sysClk,
          dmaRst(0)           => sysRst,
-         dmaIbMasters(0)     => ethTxMaster,
-         dmaIbSlaves (0)     => ethTxSlave,
-         dmaObMasters(0)     => ethRxMaster,
-         dmaObSlaves (0)     => ethRxSlave,
+         dmaIbMasters(0)     => ethRxMaster,
+         dmaIbSlaves (0)     => ethRxSlave,
+         dmaObMasters(0)     => ethTxMaster,
+         dmaObSlaves (0)     => ethTxSlave,
 --         -- Slave AXI-Lite Interface
---         axiLiteClk          : in  slv(NUM_LANE_G-1 downto 0)                     := (others => '0');
---         axiLiteRst          : in  slv(NUM_LANE_G-1 downto 0)                     := (others => '0');
---         axiLiteReadMasters  : in  AxiLiteReadMasterArray(NUM_LANE_G-1 downto 0)  := (others => AXI_LITE_READ_MASTER_INIT_C);
---         axiLiteReadSlaves   : out AxiLiteReadSlaveArray(NUM_LANE_G-1 downto 0);
---         axiLiteWriteMasters : in  AxiLiteWriteMasterArray(NUM_LANE_G-1 downto 0) := (others => AXI_LITE_WRITE_MASTER_INIT_C);
---         axiLiteWriteSlaves  : out AxiLiteWriteSlaveArray(NUM_LANE_G-1 downto 0);
+         axiLiteClk(0)       => sysClk,
+         axiLiteRst(0)       => sysRst,
+         axiLiteReadMasters(0)  => axilReadMasters(0),
+         axiLiteReadSlaves(0)   => axilReadSlaves(0),
+         axiLiteWriteMasters(0) => axilWriteMasters(0),
+         axiLiteWriteSlaves(0)  => axilWriteSlaves(0),
          -- Misc. Signals
          extRst              => sysRst,
          phyClk              => open,
@@ -513,17 +529,40 @@ begin
          gtRefClk            => siClk,
 --         gtClkP              : in  sl                                             := '1';
 --         gtClkN              : in  sl                                             := '0';
+         gtTxPolarity(0)     => '1',
          -- MGT Ports
-         gtTxP(0)            => sfpTxP(1),
-         gtTxN(0)            => sfpTxN(1),
+         gtTxP(0)            => sfpTxN(1),
+         gtTxN(0)            => sfpTxP(1),
          gtRxP(0)            => sfpRxP(1),
          gtRxN(0)            => sfpRxN(1)
+      );
+
+   U_ILA_ETH_RX : entity work.IlaAxiStream
+      port map (
+         axisClk         => sysClk,
+         trigIn          => dbgTrig(0),
+         trigInAck       => dbgTrig(1),
+         trigOut         => dbgTrig(2),
+         trigOutAck      => dbgTrig(3),
+         mAxis           => ethRxMaster,
+         sAxis           => ethRxSlave
+      );
+
+   U_ILA_ETH_TX : entity work.IlaAxiStream
+      port map (
+         axisClk         => sysClk,
+         trigIn          => dbgTrig(2),
+         trigInAck       => dbgTrig(3),
+         trigOut         => dbgTrig(0),
+         trigOutAck      => dbgTrig(1),
+         mAxis           => ethTxMaster,
+         sAxis           => ethTxSlave
       );
 
    U_PL_ETH : entity work.EthPortMapping
       generic map (
          TPD_G           => TPD_G,
-         CLK_FREQUENCY_G => 125.0E+6,
+         CLK_FREQUENCY_G => CLK_FREQ_C,
          MAC_ADDR_G      => ETH_MAC_C,
          IP_ADDR_G       => x"410AA8C0",  -- 192.168.2.10 (ETH only)
          DHCP_G          => true,
@@ -561,10 +600,10 @@ begin
          udpRxMaster     => timingIbMaster,
          udpRxSlave      => timingIbSlave
 --         -- AXI-Lite MASTER Interface
---         axilWriteMaster : out AxiLiteWriteMasterType := AXI_LITE_WRITE_MASTER_INIT_C;
---         axilWriteSlave  : in  AxiLiteWriteSlaveType  := AXI_LITE_WRITE_SLAVE_INIT_C;
---         axilReadMaster  : out AxiLiteReadMasterType  := AXI_LITE_READ_MASTER_INIT_C;
---         axilReadSlave   : in  AxiLiteReadSlaveType   := AXI_LITE_READ_SLAVE_INIT_C
+--         axilWriteMaster => ,
+--         axilWriteSlave  => ,
+--         axilReadMaster  => ,
+--         axilReadSlave   =>
       );
 
    end generate; -- if TIMING_UDP_PORT_C /= 0
