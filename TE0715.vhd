@@ -69,8 +69,6 @@ entity TE0715 is
       mgtRefClkN        : in  slv(1 downto 0);
       diffOutP          : out slv(NUM_TRIGS_G - 1 downto 0);
       diffOutN          : out slv(NUM_TRIGS_G - 1 downto 0);
---      diffInpP          : in  slv(0 downto 0) := (others => '0');
---      diffInpN          : in  slv(0 downto 0) := (others => '1');
       timingRecClkP     : out sl;
       timingRecClkN     : out sl;
       led               : out slv(NUM_LED_G - 1 downto 0);
@@ -114,8 +112,12 @@ architecture top_level of TE0715 is
   constant ETH_MAC_C   : slv(47 downto 0) := x"aa0300564400";  -- 00:44:56:00:03:01 (ETH only)
 
   constant NUM_AXI_SLV_C : natural        := 1;
-
---  signal   diffInp     : slv(diffInpP'range);
+  
+  -- some differential outputs are swapped on PCB
+  constant TIMING_TRIG_INVERT_C : slv(NUM_TRIGS_G - 1 downto 0) := "0100011";
+  
+  constant BLINK_TIME_C         : natural := natural( CLK_FREQ_C * 0.2 );
+  constant BLINK_TIME_UNS_C     : unsigned(bitSize(BLINK_TIME_C) - 1 downto 0) := to_unsigned(BLINK_TIME_C, bitSize(BLINK_TIME_C));
 
   signal   siClk       : sl;
   signal   siClkLoc    : sl;
@@ -127,7 +129,7 @@ architecture top_level of TE0715 is
   signal   rxDiv       : unsigned(27 downto 0) := to_unsigned(0, 28);
 
   signal   rxLedData   : slv(1 downto 0);
-  signal   rxLedTimer  : unsigned(27 downto 0) := to_unsigned(0, 28);
+  signal   rxLedTimer  : unsigned(BLINK_TIME_UNS_C'range) := to_unsigned(0, BLINK_TIME_UNS_C'length);
   signal   rxLedState  : sl := '0';
   signal   rxClkState  : sl := rxDiv(27);
 
@@ -466,6 +468,7 @@ begin
          timingTxP            => sfpTxP(0),
          timingTxN            => sfpTxN(0),
          timingTrig           => timingTrig,
+         timingTrigInvert     => TIMING_TRIG_INVERT_C,
          timingRxStat         => timingRxStat,
          timingTxStat         => timingTxStat,
          timingTxClk          => timingTxClk,
@@ -531,8 +534,8 @@ begin
 --         gtClkN              : in  sl                                             := '0';
          gtTxPolarity(0)     => '1',
          -- MGT Ports
-         gtTxP(0)            => sfpTxN(1),
-         gtTxN(0)            => sfpTxP(1),
+         gtTxP(0)            => sfpTxP(1),
+         gtTxN(0)            => sfpTxN(1),
          gtRxP(0)            => sfpRxP(1),
          gtRxN(0)            => sfpRxN(1)
       );
@@ -770,8 +773,8 @@ begin
             else
                if ( rxLedTimer /= 0 ) then
                   rxLedTimer <= rxLedTimer - 1;
-               elsif ( rxDiv(27) = '1' and rxClkState = '0' ) then
-                  rxLedTimer <= to_unsigned(10000000, rxLedTimer'length); -- 0.2s
+               elsif ( rxLedData(1) = '1' and rxClkState = '0' ) then
+                  rxLedTimer <= BLINK_TIME_UNS_C;
                   rxLedState <= '1';
                else
                   rxLedState <= '0';
@@ -786,6 +789,7 @@ begin
    led(0) <= rxLedState;
    -- led(0) <= sl(rxDiv(27));
    led(1) <= not timingRxStat.locked;
+   
    -- Ethernet PHY LED[0] -- unfortunately this LED is
    -- virtually disconnected on the TE0715 module. There
    -- is a level translator (U21) with /OE tied to VCC
@@ -793,7 +797,7 @@ begin
    -- led(2) <= gpIn(2);
 
    -- led(2) is the yellow lED in the ethernet connector
-   led(2) <= '0';
+   led(2) <= rxDiv(27);
    -- led(3) and (4) are anti-parallel green/orange LEDs in the ethernet connector
    led(3) <= sl(txDiv(27));
    led(4) <= not sl(txDiv(27));
