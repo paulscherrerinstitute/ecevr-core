@@ -436,6 +436,7 @@ begin
          TPGMINI_G            => true,
          GEN_TIMING_G         => true,
          TIMING_UDP_MSG_G     => true,
+         INVERT_POLARITY_G    => TIMING_TRIG_INVERT_C,
          NUM_EXT_SLAVES_G     => NUM_AXI_SLV_C,
          NUM_TRIGS_G          => NUM_TRIGS_G
       )
@@ -468,7 +469,6 @@ begin
          timingTxP            => sfpTxP(0),
          timingTxN            => sfpTxN(0),
          timingTrig           => timingTrig,
-         timingTrigInvert     => TIMING_TRIG_INVERT_C,
          timingRxStat         => timingRxStat,
          timingTxStat         => timingTxStat,
          timingTxClk          => timingTxClk,
