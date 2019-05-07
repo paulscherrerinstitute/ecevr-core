@@ -114,7 +114,7 @@ architecture top_level of TE0715 is
   constant NUM_AXI_SLV_C : natural        := 1;
   
   -- some differential outputs are swapped on PCB
-  constant TIMING_TRIG_INVERT_C : slv(NUM_TRIGS_G - 1 downto 0) := "0100011";
+  constant TIMING_TRIG_INVERT_C : slv(NUM_TRIGS_G - 1 downto 0) := "1100010";
   
   constant BLINK_TIME_C         : natural := natural( CLK_FREQ_C * 0.2 );
   constant BLINK_TIME_UNS_C     : unsigned(bitSize(BLINK_TIME_C) - 1 downto 0) := to_unsigned(BLINK_TIME_C, bitSize(BLINK_TIME_C));
