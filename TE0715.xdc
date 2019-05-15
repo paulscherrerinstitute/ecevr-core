@@ -12,37 +12,29 @@
 
 ##########################################################
 ## SFP MGT0
-#set_property PACKAGE_PIN AA3     [get_ports {timingTxP}]
-#set_property PACKAGE_PIN AB3     [get_ports {timingTxN}]
-#set_property PACKAGE_PIN AA7     [get_ports {timingRxP}]
-#set_property PACKAGE_PIN AB7     [get_ports {timingRxN}]
+set_property PACKAGE_PIN AA3     [get_ports {mgtTxP[0]}]
+set_property PACKAGE_PIN AB3     [get_ports {mgtTxN[0]}]
+set_property PACKAGE_PIN AA7     [get_ports {mgtRxP[0]}]
+set_property PACKAGE_PIN AB7     [get_ports {mgtRxN[0]}]
 
 ## SFP MGT1
-set_property PACKAGE_PIN W4      [get_ports {sfpTxP[0]}]
-#set_property IO_BUFFER_TYPE NONE [get_ports {sfpTxP[0]}]
-set_property PACKAGE_PIN Y4      [get_ports {sfpTxN[0]}]
-#set_property IO_BUFFER_TYPE NONE [get_ports {sfpTxN[0]}]
-set_property PACKAGE_PIN W8      [get_ports {sfpRxP[0]}]
-#set_property IO_BUFFER_TYPE NONE [get_ports {sfpRxP[0]}]
-set_property PACKAGE_PIN Y8      [get_ports {sfpRxN[0]}]
-#set_property IO_BUFFER_TYPE NONE [get_ports {sfpRxN[0]}]
+set_property PACKAGE_PIN W4      [get_ports {mgtTxP[1]}]
+set_property PACKAGE_PIN Y4      [get_ports {mgtTxN[1]}]
+set_property PACKAGE_PIN W8      [get_ports {mgtRxP[1]}]
+set_property PACKAGE_PIN Y8      [get_ports {mgtRxN[1]}]
 
 
 ## SFP MGT2
-set_property PACKAGE_PIN AA5     [get_ports {sfpTxP[1]}]
-#set_property IO_BUFFER_TYPE NONE [get_ports {sfpTxP[1]}]
-set_property PACKAGE_PIN AB5     [get_ports {sfpTxN[1]}]
-#set_property IO_BUFFER_TYPE NONE [get_ports {sfpTxN[1]}]
-set_property PACKAGE_PIN AA9     [get_ports {sfpRxP[1]}]
-#set_property IO_BUFFER_TYPE NONE [get_ports {sfpRxP[1]}]
-set_property PACKAGE_PIN AB9     [get_ports {sfpRxN[1]}]
-#set_property IO_BUFFER_TYPE NONE [get_ports {sfpRxN[1]}]
+set_property PACKAGE_PIN AA5     [get_ports {mgtTxP[2]}]
+set_property PACKAGE_PIN AB5     [get_ports {mgtTxN[2]}]
+set_property PACKAGE_PIN AA9     [get_ports {mgtRxP[2]}]
+set_property PACKAGE_PIN AB9     [get_ports {mgtRxN[2]}]
 
 ## SFP MGT3
-#set_property PACKAGE_PIN W2      [get_ports {sfpTxP[2]}]
-#set_property PACKAGE_PIN Y2      [get_ports {sfpTxN[2]}]
-#set_property PACKAGE_PIN W6      [get_ports {sfpRxP[2]}]
-#set_property PACKAGE_PIN Y6      [get_ports {sfpRxN[2]}]
+set_property PACKAGE_PIN W2      [get_ports {mgtTxP[3]}]
+set_property PACKAGE_PIN Y2      [get_ports {mgtTxN[3]}]
+set_property PACKAGE_PIN W6      [get_ports {mgtRxP[3]}]
+set_property PACKAGE_PIN Y6      [get_ports {mgtRxN[3]}]
 
 ## MGTREFCLK0 -- carrier
 set_property PACKAGE_PIN U9      [get_ports {mgtRefClkP[0]}]

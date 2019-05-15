@@ -38,14 +38,17 @@ entity TE0715 is
       NUM_TRIGS_G   : natural := 7;
       CLK_FEEDTHRU_G: boolean := false;
       XVC_EN_G      : boolean := false;
-      IBERT_G       : boolean := false; -- adapt NUM_SFPS_G
+      -- Did you set bit PMA_RSV2[5] of your GTX? See UG476 page 209.
+      -- Otherwise the eye-scan is completely red
+      IBERT_G       : boolean := false; -- when enabled, load ip/_ibert_.xci
       NUM_SFPS_G    : natural := 2;
+      MIN_SFP_G     : natural := 1;
       NUM_GP_IN_G   : natural := 3;
       NUM_LED_G     : natural := 5
    );
    port (
       DDR_addr          : inout STD_LOGIC_VECTOR ( 14 downto 0 );
-      DDR_ba            : inout STD_LOGIC_VECTOR ( 2 downto 0 );
+      DDR_ba            : inout STD_LOGIC_VECTOR (  2 downto 0 );
       DDR_cas_n         : inout STD_LOGIC;
       DDR_ck_n          : inout STD_LOGIC;
       DDR_ck_p          : inout STD_LOGIC;
@@ -78,10 +81,10 @@ entity TE0715 is
       -- led[3] -> orange/anode - green/cathode in eth connector
       -- led[4] -> orange/cathode - green/anode in eth connector
 --      enableSFP         : out sl := '1';
-      sfpTxP            : out slv(NUM_SFPS_G - 1 downto 0);
-      sfpTxN            : out slv(NUM_SFPS_G - 1 downto 0);
-      sfpRxP            : in  slv(NUM_SFPS_G - 1 downto 0);
-      sfpRxN            : in  slv(NUM_SFPS_G - 1 downto 0);
+      mgtTxP            : out slv(3 downto 0);
+      mgtTxN            : out slv(3 downto 0);
+      mgtRxP            : in  slv(3 downto 0);
+      mgtRxN            : in  slv(3 downto 0);
 
       sfp_tx_dis        : out slv(NUM_SFPS_G - 1 downto 0) := (others => '0');
       sfp_tx_flt        : in  slv(NUM_SFPS_G - 1 downto 0);
@@ -95,6 +98,13 @@ entity TE0715 is
       -- gpIn[2] -> Marvell Ethernet PHY LED[0]
    );
 
+   attribute IO_BUFFER_TYPE : string;
+   
+   attribute IO_BUFFER_TYPE of mgtTxP : signal is ite(IBERT_G, "OBUF", "NONE");
+   attribute IO_BUFFER_TYPE of mgtTxN : signal is ite(IBERT_G, "OBUF", "NONE");
+   attribute IO_BUFFER_TYPE of mgtRxP : signal is ite(IBERT_G, "IBUF", "NONE");
+   attribute IO_BUFFER_TYPE of mgtRxN : signal is ite(IBERT_G, "IBUF", "NONE");
+
 end TE0715;
 
 architecture top_level of TE0715 is
@@ -102,8 +112,6 @@ architecture top_level of TE0715 is
   -- must match CONFIG.PCW_NUM_F2P_INTR_INPUTS {16} setting for IP generation
   constant NUM_IRQS_C  : natural          := 16;
   constant CLK_FREQ_C  : real             := 50.0E6;
-
-  constant GEN_IC_C    : boolean          := false;
 
   constant FEEDTHRU_C  : natural          := ite( CLK_FEEDTHRU_G, 1, 0 );
 
@@ -137,6 +145,11 @@ architecture top_level of TE0715 is
 
   signal   macAddr     : slv(47 downto 0);
   signal   ipAddr      : slv(31 downto 0);
+
+  signal   sfpRxP      : slv(NUM_SFPS_G - 1 downto 0);
+  signal   sfpRxN      : slv(NUM_SFPS_G - 1 downto 0);
+  signal   sfpTxP      : slv(NUM_SFPS_G - 1 downto 0);
+  signal   sfpTxN      : slv(NUM_SFPS_G - 1 downto 0);
 
 COMPONENT ibert_7series_gtx_0
   PORT (
@@ -358,6 +371,29 @@ begin
 
    G_COMM : if ( not IBERT_G ) generate
 
+      GEN_IBUF : for inst in 0 to NUM_SFPS_G - 1 generate
+         U_OBUFP : component OBUF
+            port map (
+               I => sfpTxP(             inst ),
+               O => mgtTxP( MIN_SFP_G + inst )
+            );
+         U_OBUFN : component OBUF
+            port map (
+               I => sfpTxN(             inst ),
+               O => mgtTxN( MIN_SFP_G + inst )
+            );
+         U_IBUFP : component IBUF
+            port map (
+               I => mgtRxP( MIN_SFP_G + inst ),
+               O => sfpRxP(             inst )
+            );
+         U_IBUFN : component IBUF
+            port map (
+               I => mgtRxN( MIN_SFP_G + inst ),
+               O => sfpRxN(             inst )
+            );
+      end generate;
+
    -- axiReadSlave  <= AXI_READ_SLAVE_FORCE_C;
    -- axiWriteSlave <= AXI_WRITE_SLAVE_FORCE_C;
 
@@ -380,51 +416,24 @@ begin
           sAxilWrite             => axilWriteSlave
       );
 
-   GEN_INTERCONNECT : if ( GEN_IC_C ) generate
+   U_A2A : entity work.AxiToAxiLite
+      generic map (
+         TPD_G            => TPD_G
+      )
+      port map (
+         axiClk           => sysClk,
+         axiClkRst        => sysRst,
 
-   begin
+         axiReadMaster    => axiReadMaster,
+         axiReadSlave     => axiReadSlave,
+         axiWriteMaster   => axiWriteMaster,
+         axiWriteSlave    => axiWriteSlave,
 
-     U_A2A : entity work.Axi4ToAxilSurfWrapper
-        port map (
-          axiClk                      => sysClk,
-          axiRst                      => sysRst,
-
-          axiReadMaster               => axiReadMaster,
-          axiReadSlave                => axiReadSlave,
-          axiWriteMaster              => axiWriteMaster,
-          axiWriteSlave               => axiWriteSlave,
-
-          axilReadMaster              => axilReadMaster,
-          axilReadSlave               => axilReadSlave,
-          axilWriteMaster             => axilWriteMaster,
-          axilWriteSlave              => axilWriteSlave
-        );
-
-   end generate;
-
-
-   GEN_AXI_2_AXILITE : if ( not GEN_IC_C ) generate
-
-      U_A2A : entity work.AxiToAxiLite
-         generic map (
-            TPD_G            => TPD_G
-         )
-         port map (
-            axiClk           => sysClk,
-            axiClkRst        => sysRst,
-
-            axiReadMaster    => axiReadMaster,
-            axiReadSlave     => axiReadSlave,
-            axiWriteMaster   => axiWriteMaster,
-            axiWriteSlave    => axiWriteSlave,
-
-            axilReadMaster   => axilReadMaster,
-            axilReadSlave    => axilReadSlave,
-            axilWriteMaster  => axilWriteMaster,
-            axilWriteSlave   => axilWriteSlave
-         );
-
-   end generate;
+         axilReadMaster   => axilReadMaster,
+         axilReadSlave    => axilReadSlave,
+         axilWriteMaster  => axilWriteMaster,
+         axilWriteSlave   => axilWriteSlave
+      );
 
    -------------------
    -- AXI-Lite Modules
@@ -840,17 +849,17 @@ begin
 --      );
    end generate;
 
-   your_instance_name : ibert_7series_gtx_0
-  PORT MAP (
-    TXN_O => sfpTxN,
-    TXP_O => sfpTxP,
-    RXOUTCLK_O => open,
-    RXN_I => sfpRxN,
-    RXP_I => sfpRxP,
-    GTREFCLK0_I(0) => refClkDbg(0),
-    GTREFCLK1_I(0) => refClkDbg(1),
-    SYSCLK_I => sysClk
-  );
+   U_IBERT : component ibert_7series_gtx_0
+      PORT MAP (
+         TXN_O          => mgtTxN,
+         TXP_O          => mgtTxP,
+         RXOUTCLK_O     => open,
+         RXN_I          => mgtRxN,
+         RXP_I          => mgtRxP,
+         GTREFCLK0_I(0) => refClkDbg(0),
+         GTREFCLK1_I(0) => refClkDbg(1),
+         SYSCLK_I       => sysClk
+      );
 
   GEN_OUTBUFDS : for i in diffOutP'left - FEEDTHRU_C downto 0 generate
    begin
