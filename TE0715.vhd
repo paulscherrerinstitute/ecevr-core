@@ -112,10 +112,10 @@ architecture top_level of TE0715 is
   constant ETH_MAC_C   : slv(47 downto 0) := x"aa0300564400";  -- 00:44:56:00:03:01 (ETH only)
 
   constant NUM_AXI_SLV_C : natural        := 1;
-  
+
   -- some differential outputs are swapped on PCB
   constant TIMING_TRIG_INVERT_C : slv(NUM_TRIGS_G - 1 downto 0) := "1100010";
-  
+
   constant BLINK_TIME_C         : natural := natural( CLK_FREQ_C * 0.2 );
   constant BLINK_TIME_UNS_C     : unsigned(bitSize(BLINK_TIME_C) - 1 downto 0) := to_unsigned(BLINK_TIME_C, bitSize(BLINK_TIME_C));
 
@@ -134,6 +134,9 @@ architecture top_level of TE0715 is
   signal   rxClkState  : sl := rxDiv(27);
 
   signal   dbgTrig     : slv(3 downto 0);
+
+  signal   macAddr     : slv(47 downto 0);
+  signal   ipAddr      : slv(31 downto 0);
 
 COMPONENT ibert_7series_gtx_0
   PORT (
@@ -432,6 +435,8 @@ begin
          BUILD_INFO_G         => BUILD_INFO_G,
          XIL_DEVICE_G         => "7SERIES",
          AXIL_BASE_ADDR_G     => x"40000000",
+         MAC_ADDR_G           => ETH_MAC_C,
+         IP_ADDR_G            => x"410AA8C0",  -- 192.168.2.10 (ETH only)
          USE_SLOWCLK_G        => true,
          TPGMINI_G            => true,
          GEN_TIMING_G         => true,
@@ -485,7 +490,11 @@ begin
          axilReadMasters      => axilReadMasters,
          axilReadSlaves       => axilReadSlaves,
          axilWriteMasters     => axilWriteMasters,
-         axilWriteSlaves      => axilWriteSlaves
+         axilWriteSlaves      => axilWriteSlaves,
+
+         -- Register values
+         macAddrOut           => macAddr,
+         ipAddrOut            => ipAddr
       );
 
    GEN_TIMING_UDP : if ( TIMING_UDP_PORT_C /= 0 ) generate
@@ -566,8 +575,6 @@ begin
       generic map (
          TPD_G           => TPD_G,
          CLK_FREQUENCY_G => CLK_FREQ_C,
-         MAC_ADDR_G      => ETH_MAC_C,
-         IP_ADDR_G       => x"410AA8C0",  -- 192.168.2.10 (ETH only)
          DHCP_G          => true,
          JUMBO_G         => false,
          USE_RSSI_G      => false,
@@ -578,6 +585,9 @@ begin
          -- Clock and Reset
          clk             => sysClk,
          rst             => sysRst,
+         --
+         ipAddrIn        => ipAddr,
+         macAddrIn       => macAddr,
          -- ETH interface
          txMaster        => ethTxMaster,
          txSlave         => ethTxSlave,
@@ -789,7 +799,7 @@ begin
    led(0) <= rxLedState;
    -- led(0) <= sl(rxDiv(27));
    led(1) <= not timingRxStat.locked;
-   
+
    -- Ethernet PHY LED[0] -- unfortunately this LED is
    -- virtually disconnected on the TE0715 module. There
    -- is a level translator (U21) with /OE tied to VCC
