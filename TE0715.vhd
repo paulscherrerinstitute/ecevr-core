@@ -440,7 +440,7 @@ begin
          USE_SLOWCLK_G        => true,
          TPGMINI_G            => true,
          GEN_TIMING_G         => true,
-         TIMING_UDP_MSG_G     => true,
+         TIMING_UDP_MSG_G     => (TIMING_UDP_PORT_C /= 0),
          INVERT_POLARITY_G    => TIMING_TRIG_INVERT_C,
          NUM_EXT_SLAVES_G     => NUM_AXI_SLV_C,
          NUM_TRIGS_G          => NUM_TRIGS_G
@@ -516,7 +516,7 @@ begin
       )
       port map (
          -- Local Configurations
-         localMac(0)         => ETH_MAC_C,
+         localMac(0)         => macAddr,
          -- Streaming DMA Interface
          dmaClk(0)           => sysClk,
          dmaRst(0)           => sysRst,
