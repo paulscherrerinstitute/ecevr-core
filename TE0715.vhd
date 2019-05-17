@@ -109,6 +109,8 @@ end TE0715;
 
 architecture top_level of TE0715 is
 
+  constant COPY_CLOCKS_C : boolean        := false;
+
   -- must match CONFIG.PCW_NUM_F2P_INTR_INPUTS {16} setting for IP generation
   constant NUM_IRQS_C  : natural          := 16;
   constant CLK_FREQ_C  : real             := 50.0E6;
@@ -285,7 +287,7 @@ component processing_system7_0
 
    signal   timingTxClk     : sl;
 
-   signal   trigReg         : slv(NUM_TRIGS_G - 1 downto 0);
+   signal   trigReg         : slv(NUM_TRIGS_G - 1 downto 0) := TIMING_TRIG_INVERT_C;
    signal   recClk2         : slv(1 downto 0) := "00";
 
    signal   refClkDbg       : slv(1 downto 0);
@@ -709,13 +711,28 @@ begin
    end process P_DIV_TX;
 
 
+   G_COPY_CLOCKS : if ( COPY_CLOCKS_C ) generate
+      P_COPY_CLOCKS : process ( outClk) is
+      begin
+         if ( rising_edge( outClk ) ) then
+            if ( outRst = '1' ) then 
+               trigReg <= TIMING_TRIG_INVERT_C;
+	        else
+               trigReg <= not trigReg;
+            end if;
+         end if;
+      end process P_COPY_CLOCKS;
+   end generate;
 
-   P_TRIG_REG : process ( timingTrig ) is
-   begin
---      if ( rising_edge( outClk ) ) then
-         trigReg <= timingTrig.trigPulse(trigReg'range);
---      end if;
-   end process P_TRIG_REG;
+   G_NOT_COPY_CLOCKS: if ( not COPY_CLOCKS_C ) generate
+
+      P_TRIG_REG : process ( timingTrig ) is
+      begin
+--         if ( rising_edge( outClk ) ) then
+            trigReg <= timingTrig.trigPulse(trigReg'range);
+--         end if;
+      end process P_TRIG_REG;
+   end generate;
 
    U_ODDR : component ODDR
       generic map (
