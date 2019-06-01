@@ -58,11 +58,11 @@ set_property IOSTANDARD  LVCMOS18 [get_ports {gpIn[2]}]
 
 # B34_L10_P
 set_property PACKAGE_PIN L2      [get_ports {timingRecClkP}]
-set_property IOSTANDARD  LVDS    [get_ports {timingRecClkP}]
+# IOSTANDARD defined in VHDL depending on PRJ_PART
 
 # B34_L10_N
 set_property PACKAGE_PIN L1      [get_ports {timingRecClkN}]
-set_property IOSTANDARD  LVDS    [get_ports {timingRecClkN}]
+# IOSTANDARD defined in VHDL depending on PRJ_PART
 
 create_clock -name timingRefClk -period 5.3846 [get_ports {mgtRefClkP[0]}]
 create_clock -name timingTxClk  -period 5.385  [get_pins -hier -regexp {.*/GEN_TIMING.U_TimingGt/.*/TXOUTCLK$}]

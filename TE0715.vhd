@@ -44,7 +44,8 @@ entity TE0715 is
       NUM_SFPS_G    : natural := 2;
       MIN_SFP_G     : natural := 1;
       NUM_GP_IN_G   : natural := 3;
-      NUM_LED_G     : natural := 5
+      NUM_LED_G     : natural := 5;
+      PRJ_PART_G    : string
    );
    port (
       DDR_addr          : inout STD_LOGIC_VECTOR ( 14 downto 0 );
@@ -98,12 +99,26 @@ entity TE0715 is
       -- gpIn[2] -> Marvell Ethernet PHY LED[0]
    );
 
+   function  isArtix(part : string := PRJ_PART_G) return boolean is
+      variable prefix: string(0 to 6);
+   begin
+      prefix := part(part'left to part'left + 6);
+      return prefix = "XC7Z012" or prefix = "XC7Z015";
+   end function isArtix;
+
    attribute IO_BUFFER_TYPE : string;
+   attribute IOSTANDARD     : string;
+   attribute SLEW           : string;
    
    attribute IO_BUFFER_TYPE of mgtTxP : signal is ite(IBERT_G, "OBUF", "NONE");
    attribute IO_BUFFER_TYPE of mgtTxN : signal is ite(IBERT_G, "OBUF", "NONE");
    attribute IO_BUFFER_TYPE of mgtRxP : signal is ite(IBERT_G, "IBUF", "NONE");
    attribute IO_BUFFER_TYPE of mgtRxN : signal is ite(IBERT_G, "IBUF", "NONE");
+
+   attribute IOSTANDARD     of timingRecClkP : signal is ite( isArtix, "DIFF_HSTL_I_18", "LVDS" );
+   attribute IOSTANDARD     of timingRecClkN : signal is ite( isArtix, "DIFF_HSTL_I_18", "LVDS" );
+   attribute SLEW           of timingRecClkP : signal is ite( isArtix, "FAST",           ""     );
+   attribute SLEW           of timingRecClkN : signal is ite( isArtix, "FAST",           ""     );
 
 end TE0715;
 
@@ -117,7 +132,7 @@ architecture top_level of TE0715 is
 
   constant FEEDTHRU_C  : natural          := ite( CLK_FEEDTHRU_G, 1, 0 );
 
-  constant TIMING_UDP_PORT_C : natural    := 8197;
+  constant TIMING_UDP_PORT_C : natural    := ite( isArtix, 0, 8197 );
 
   constant ETH_MAC_C   : slv(47 downto 0) := x"aa0300564400";  -- 00:44:56:00:03:01 (ETH only)
 
@@ -449,7 +464,7 @@ begin
          MAC_ADDR_G           => ETH_MAC_C,
          IP_ADDR_G            => x"410AA8C0",  -- 192.168.2.10 (ETH only)
          USE_SLOWCLK_G        => true,
-         TPGMINI_G            => true,
+         TPGMINI_G            => (not isArtix),
          GEN_TIMING_G         => true,
          TIMING_UDP_MSG_G     => (TIMING_UDP_PORT_C /= 0),
          INVERT_POLARITY_G    => TIMING_TRIG_INVERT_C,
@@ -512,8 +527,12 @@ begin
 
       signal ethTxMaster, ethRxMaster : AxiStreamMasterType;
       signal ethTxSlave , ethRxSlave  : AxiStreamSlaveType;
+      signal tiedToOne                : sl := '1';
+      constant ETH_AXIS_CONFIG_C      : AxiStreamConfigArray(3 downto 0) := (others => EMAC_AXIS_CONFIG_C);
 
    begin
+
+   GEN_GTX_ETH : if ( not isArtix ) generate
 
    U_PL_ETH_GTX : entity work.GigEthGtx7Wrapper
       generic map (
@@ -523,7 +542,7 @@ begin
          -- AXI-Lite Configurations
          EN_AXI_REG_G        => true,
          -- AXI Streaming Configurations
-         AXIS_CONFIG_G       => (others => EMAC_AXIS_CONFIG_C)
+         AXIS_CONFIG_G       => ETH_AXIS_CONFIG_C
       )
       port map (
          -- Local Configurations
@@ -552,13 +571,64 @@ begin
          gtRefClk            => siClk,
 --         gtClkP              : in  sl                                             := '1';
 --         gtClkN              : in  sl                                             := '0';
-         gtTxPolarity(0)     => '1',
+         gtTxPolarity(0)     => tiedToOne,
          -- MGT Ports
          gtTxP(0)            => sfpTxP(1),
          gtTxN(0)            => sfpTxN(1),
          gtRxP(0)            => sfpRxP(1),
          gtRxN(0)            => sfpRxN(1)
       );
+
+   end generate;
+
+   GEN_GTP_ETH : if ( isArtix ) generate
+
+   U_PL_ETH_GTP : entity work.GigEthGtp7Wrapper
+      generic map (
+         TPD_G               => TPD_G,
+         -- Clocking Configurations
+         USE_GTREFCLK_G      => true, --  FALSE: gtClkP/N,  TRUE: gtRefClk
+         -- AXI-Lite Configurations
+         EN_AXI_REG_G        => true,
+         -- AXI Streaming Configurations
+         AXIS_CONFIG_G       => ETH_AXIS_CONFIG_C
+      )
+      port map (
+         -- Local Configurations
+         localMac(0)         => macAddr,
+         -- Streaming DMA Interface
+         dmaClk(0)           => sysClk,
+         dmaRst(0)           => sysRst,
+         dmaIbMasters(0)     => ethRxMaster,
+         dmaIbSlaves (0)     => ethRxSlave,
+         dmaObMasters(0)     => ethTxMaster,
+         dmaObSlaves (0)     => ethTxSlave,
+--         -- Slave AXI-Lite Interface
+         axiLiteClk(0)       => sysClk,
+         axiLiteRst(0)       => sysRst,
+         axiLiteReadMasters(0)  => axilReadMasters(0),
+         axiLiteReadSlaves(0)   => axilReadSlaves(0),
+         axiLiteWriteMasters(0) => axilWriteMasters(0),
+         axiLiteWriteSlaves(0)  => axilWriteSlaves(0),
+         -- Misc. Signals
+         extRst              => sysRst,
+         phyClk              => open,
+         phyRst              => open,
+--         phyReady            : out slv(NUM_LANE_G-1 downto 0);
+--         sigDet              : in  slv(NUM_LANE_G-1 downto 0)                     := (others => '1');
+         -- MGT Clock Port (125.00 MHz or 250.0 MHz)
+         gtRefClk            => siClk,
+--         gtClkP              : in  sl                                             := '1';
+--         gtClkN              : in  sl                                             := '0';
+         gtTxPolarity(0)     => tiedToOne,
+         -- MGT Ports
+         gtTxP(0)            => sfpTxP(1),
+         gtTxN(0)            => sfpTxN(1),
+         gtRxP(0)            => sfpRxP(1),
+         gtRxN(0)            => sfpRxN(1)
+      );
+
+   end generate;
 
    U_ILA_ETH_RX : entity work.IlaAxiStream
       port map (
