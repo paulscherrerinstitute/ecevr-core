@@ -507,8 +507,20 @@ begin
          macAddrOut           => macAddr
       );
 
-   timingIb.refClkP  <= mgtRefClkP(0);
-   timingIb.refClkN  <= mgtRefClkN(0);
+   U_IBUF_GTX : IBUFDS_GTE2
+      generic map (
+         CLKRCV_TRST      => true, -- ug476
+         CLKCM_CFG        => true, -- ug476
+         CLKSWING_CFG     => "11"  -- ug476
+      )
+      port map (
+         I                => mgtRefClkP(1),
+         IB               => mgtRefClkN(1),
+         CEB              => '0',
+         O                => timingIb.refClk,
+         ODIV2            => open
+      );
+
    timingRecClk      <= timingOb.recClk;
    timingRecRst      <= timingOb.recRst;
    timingIb.RxP      <= sfpRxP(0);
@@ -668,8 +680,8 @@ begin
          CLKSWING_CFG     => "11"  -- ug476
       )
       port map (
-         I                => mgtRefClkP(1),
-         IB               => mgtRefClkN(1),
+         I                => mgtRefClkP(0),
+         IB               => mgtRefClkN(0),
          CEB              => '0',
          O                => siClkLoc,
          ODIV2            => open
