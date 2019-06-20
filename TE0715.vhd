@@ -40,7 +40,7 @@ entity TE0715 is
       CLK_FEEDTHRU_G: boolean := false;
       -- Did you set bit PMA_RSV2[5] of your GTX? See UG476 page 209.
       -- Otherwise the eye-scan is completely red
-      IBERT_G       : boolean := false; -- when enabled, load ip/_ibert_.xci
+      PRJ_VARIANT_G : string  := "deflt"; -- when enabled, load ip/_ibert_.xci
       NUM_SFPS_G    : natural := 2;
       MIN_SFP_G     : natural := 1;
       NUM_GP_IN_G   : natural := 3;
@@ -99,6 +99,9 @@ entity TE0715 is
       -- gpIn[2] -> Marvell Ethernet PHY LED[0]
    );
 
+   constant  IBERT_C      : boolean := ite( PRJ_VARIANT_G = "ibert", true, false );
+   constant  DEVBRD_C     : boolean := ite( PRJ_VARIANT_G = "devbd", true, false );
+
    function  isArtix(part : string := PRJ_PART_G) return boolean is
       variable prefix: string(0 to 6);
    begin
@@ -110,10 +113,10 @@ entity TE0715 is
    attribute IOSTANDARD     : string;
    attribute SLEW           : string;
    
-   attribute IO_BUFFER_TYPE of mgtTxP : signal is ite(IBERT_G, "OBUF", "NONE");
-   attribute IO_BUFFER_TYPE of mgtTxN : signal is ite(IBERT_G, "OBUF", "NONE");
-   attribute IO_BUFFER_TYPE of mgtRxP : signal is ite(IBERT_G, "IBUF", "NONE");
-   attribute IO_BUFFER_TYPE of mgtRxN : signal is ite(IBERT_G, "IBUF", "NONE");
+   attribute IO_BUFFER_TYPE of mgtTxP : signal is ite(IBERT_C, "OBUF", "NONE");
+   attribute IO_BUFFER_TYPE of mgtTxN : signal is ite(IBERT_C, "OBUF", "NONE");
+   attribute IO_BUFFER_TYPE of mgtRxP : signal is ite(IBERT_C, "IBUF", "NONE");
+   attribute IO_BUFFER_TYPE of mgtRxN : signal is ite(IBERT_C, "IBUF", "NONE");
 
    attribute IOSTANDARD     of timingRecClkP : signal is ite( isArtix, "DIFF_HSTL_I_18", "LVDS" );
    attribute IOSTANDARD     of timingRecClkN : signal is ite( isArtix, "DIFF_HSTL_I_18", "LVDS" );
@@ -145,7 +148,8 @@ architecture top_level of TE0715 is
   constant BLINK_TIME_UNS_C     : unsigned(bitSize(BLINK_TIME_C) - 1 downto 0) := to_unsigned(BLINK_TIME_C, bitSize(BLINK_TIME_C));
 
   signal   siClk       : sl;
-  signal   siClkLoc    : sl;
+
+  signal   mgtRefClk   : slv(1 downto 0);
 
   signal   outClk      : sl;
   signal   outRst      : sl;
@@ -300,13 +304,13 @@ component processing_system7_0
    signal   trigReg         : slv(NUM_TRIGS_G - 1 downto 0) := TIMING_TRIG_INVERT_C;
    signal   recClk2         : slv(1 downto 0) := "00";
 
-   signal   refClkDbg       : slv(1 downto 0);
-
    attribute IOB : string;
    attribute IOB of trigReg : signal is "TRUE";
    attribute IOB of recClk2 : signal is "TRUE";
 
 begin
+
+   assert PRJ_VARIANT_G = "deflt" or PRJ_VARIANT_G = "ibert" or PRJ_VARIANT_G = "devbd" severity failure;
 
    sysRst <= not sysRstN;
 
@@ -381,7 +385,24 @@ begin
          USB0_VBUS_PWRSELECT           => open
       );
 
-   G_COMM : if ( not IBERT_G ) generate
+   GEN_BUFDS : for i in 1 downto 0 generate
+   begin
+   U_IBUFDS : component IBUFDS_GTE2
+      generic map (
+         CLKRCV_TRST      => true, -- ug476
+         CLKCM_CFG        => true, -- ug476
+         CLKSWING_CFG     => "11"  -- ug476
+      )
+      port map (
+         I                => mgtRefClkP(i),
+         IB               => mgtRefClkN(i),
+         CEB              => '0',
+         O                => mgtRefClk(i),
+         ODIV2            => open
+      );
+   end generate;
+
+   G_COMM : if ( not IBERT_C ) generate
 
       GEN_IBUF : for inst in 0 to NUM_SFPS_G - 1 generate
          U_OBUFP : component OBUF
@@ -507,19 +528,13 @@ begin
          macAddrOut           => macAddr
       );
 
-   U_IBUF_GTX : IBUFDS_GTE2
-      generic map (
-         CLKRCV_TRST      => true, -- ug476
-         CLKCM_CFG        => true, -- ug476
-         CLKSWING_CFG     => "11"  -- ug476
-      )
-      port map (
-         I                => mgtRefClkP(1),
-         IB               => mgtRefClkN(1),
-         CEB              => '0',
-         O                => timingIb.refClk,
-         ODIV2            => open
-      );
+   GEN_DEVBRD : if ( DEVBRD_C ) generate
+      timingIb.refClk <= mgtRefClk( 1 );
+   end generate;
+
+   GEN_NORMAL : if ( not DEVBRD_C ) generate
+      timingIb.refClk <= mgtRefClk( 0 );
+   end generate;
 
    timingRecClk      <= timingOb.recClk;
    timingRecRst      <= timingOb.recRst;
@@ -673,23 +688,9 @@ begin
          );
    end generate;
 
-   U_IBUFDS : component IBUFDS_GTE2
-      generic map (
-         CLKRCV_TRST      => true, -- ug476
-         CLKCM_CFG        => true, -- ug476
-         CLKSWING_CFG     => "11"  -- ug476
-      )
-      port map (
-         I                => mgtRefClkP(0),
-         IB               => mgtRefClkN(0),
-         CEB              => '0',
-         O                => siClkLoc,
-         ODIV2            => open
-      );
-
    U_BUFG_SI : component BUFG
       port map (
-         I   => siClkLoc,
+         I   => mgtRefClk(1),
          O   => siClk
       );
 
@@ -844,33 +845,9 @@ begin
    led(3) <= sl(txDiv(27));
    led(4) <= not sl(txDiv(27));
 
-   end generate; -- if not IBERT_G
+   end generate; -- if not IBERT_C
 
-   GEN_IBERT : if ( IBERT_G ) generate
-
-   GEN_BUFS : for i in 1 downto 0 generate
-     signal wxx : sl;
-   begin
-   U_IBUFDS : component IBUFDS_GTE2
-      generic map (
-         CLKRCV_TRST      => true, -- ug476
-         CLKCM_CFG        => true, -- ug476
-         CLKSWING_CFG     => "11"  -- ug476
-      )
-      port map (
-         I                => mgtRefClkP(i),
-         IB               => mgtRefClkN(i),
-         CEB              => '0',
-         O                => refClkDbg(i),
-         ODIV2            => open
-      );
-
---   U_BUFG_SI : component BUFG
---      port map (
---         I   => wxx,
---         O   => refClkDbg(i)
---      );
-   end generate;
+   GEN_IBERT : if ( IBERT_C ) generate
 
    U_IBERT : component ibert_7series_gtx_0
       PORT MAP (
@@ -879,8 +856,8 @@ begin
          RXOUTCLK_O     => open,
          RXN_I          => mgtRxN,
          RXP_I          => mgtRxP,
-         GTREFCLK0_I(0) => refClkDbg(0),
-         GTREFCLK1_I(0) => refClkDbg(1),
+         GTREFCLK0_I(0) => mgtRefClk(0),
+         GTREFCLK1_I(0) => mgtRefClk(1),
          SYSCLK_I       => sysClk
       );
 
@@ -900,6 +877,6 @@ begin
          OB => timingRecClkN
       );
 
-   end generate; -- if IBERT_G
+   end generate; -- if IBERT_C
 
 end top_level;

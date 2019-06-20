@@ -65,8 +65,9 @@ set_property PACKAGE_PIN L1      [get_ports {timingRecClkN}]
 # IOSTANDARD defined in VHDL depending on PRJ_PART
 
 create_clock -name timingRefClk -period 5.3846 [get_ports {mgtRefClkP[0]}]
-create_clock -name timingTxClk  -period 5.385  [get_pins -hier -regexp {.*/GEN_TIMING.U_TimingGt/.*/TXOUTCLK$}]
-create_clock -name timingRxClk  -period 5.385  [get_pins -hier -regexp {.*/GEN_TIMING.U_TimingGt/.*/RXOUTCLK$}]
+# Just rename, Timing IP already defines
+set timingTxClk  [get_clocks -regexp {.*/GEN_TIMING.U_TimingGt/.*/TXOUTCLK$}]
+set timingRxClk  [get_clocks -regexp {.*/GEN_TIMING.U_TimingGt/.*/RXOUTCLK$}]
 
 # Time it 
 create_clock -name si5338Clk    -period 8.000  [get_ports {mgtRefClkP[1]}]
