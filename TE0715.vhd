@@ -15,6 +15,27 @@
 -- the terms contained in the LICENSE.txt file.
 -------------------------------------------------------------------------------
 
+-------------------------------------------------------------------------------
+-- Structurally this project is a bit of a mess. This is due to the fact that
+-- In SURF and Timing the MGTs are handled independently, i.e., ethernet and
+-- timing 'embed' MGTs in their respective wrappers.
+-- No problem because they can be clocked by individual 'channel PLLs'.
+--
+-- However, the Artix/GTP Transceiver lacks individual channel PLLs and therefore
+-- must use/share the two available quad PLLs.
+-- Unfortunately, both, the SURF/ethernet as well as the timing wrappers assume
+-- they are the sole owners of a quad and instantiate the quad PLL which creates
+-- a conflict.
+--
+-- When only a single quad is available then timing and ethernet have to share
+-- the quad PLLs (each one can use one of the two available PLLs).
+--
+-- OTOH, we don't want to change the structure completely as it works fine for
+-- other platforms (GTX). For this reason a modified version of the ethernet
+-- wrapper was created (GigEthGtp7WrapperAdv) which adds ports and generics
+-- that provide outside access to the quad pll.
+-------------------------------------------------------------------------------
+
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
@@ -99,8 +120,11 @@ entity TE0715 is
       -- gpIn[2] -> Marvell Ethernet PHY LED[0]
    );
 
-   constant  IBERT_C      : boolean := ite( PRJ_VARIANT_G = "ibert", true, false );
-   constant  DEVBRD_C     : boolean := ite( PRJ_VARIANT_G = "devbd", true, false );
+   constant  IBERT_C          : boolean := ite( PRJ_VARIANT_G = "ibert", true, false );
+   constant  DEVBRD_C         : boolean := ite( PRJ_VARIANT_G = "devbd", true, false );
+
+   constant  TIMING_PLL_C     : natural range 0 to 1 := 1;
+   constant  TIMING_PLL_SEL_C : slv(1 downto 0) := ite( TIMING_PLL_C = 0, "00", "11" );
 
    function  isArtix(part : string := PRJ_PART_G) return boolean is
       variable prefix: string(0 to 6);
@@ -135,7 +159,9 @@ architecture top_level of TE0715 is
 
   constant FEEDTHRU_C  : natural          := ite( CLK_FEEDTHRU_G, 1, 0 );
 
-  constant TIMING_UDP_PORT_C : natural    := ite( isArtix, 0, 8197 );
+  constant TIMING_UDP_PORT_C       : natural := 8197;
+
+  constant TIMING_GTP_HAS_COMMON_C : boolean := ((not isArtix) or (TIMING_UDP_PORT_C = 0));
 
   constant ETH_MAC_C   : slv(47 downto 0) := x"aa0300564400";  -- 00:44:56:00:03:01 (ETH only)
 
@@ -147,9 +173,8 @@ architecture top_level of TE0715 is
   constant BLINK_TIME_C         : natural := natural( CLK_FREQ_C * 0.2 );
   constant BLINK_TIME_UNS_C     : unsigned(bitSize(BLINK_TIME_C) - 1 downto 0) := to_unsigned(BLINK_TIME_C, bitSize(BLINK_TIME_C));
 
-  signal   siClk       : sl;
-
   signal   mgtRefClk   : slv(1 downto 0);
+  signal   mgtRefClkBuf: slv(1 downto 0);
 
   signal   outClk      : sl;
   signal   outRst      : sl;
@@ -400,6 +425,12 @@ begin
          O                => mgtRefClk(i),
          ODIV2            => open
       );
+
+   U_MGT_BUFG : component BUFG
+      port map (
+         I   => mgtRefClk(i),
+         O   => mgtRefClkBuf(i)
+      );
    end generate;
 
    G_COMM : if ( not IBERT_C ) generate
@@ -427,9 +458,6 @@ begin
             );
       end generate;
 
-   -- axiReadSlave  <= AXI_READ_SLAVE_FORCE_C;
-   -- axiWriteSlave <= AXI_WRITE_SLAVE_FORCE_C;
-
 --   U_Ila_Axi : entity work.IlaAxi4SurfWrapper
 --      port map (
 --          axiClk                      => sysClk,
@@ -440,6 +468,7 @@ begin
 --          axiWriteSlave               => axiWriteSlave
 --      );
 
+   GEN_ILA : if ( false ) generate
    U_Ila_Axil : entity work.IlaAxiLite
       port map (
           axilClk                => sysClk,
@@ -448,6 +477,7 @@ begin
           mAxilWrite             => axilWriteMaster,
           sAxilWrite             => axilWriteSlave
       );
+   end generate;
 
    U_A2A : entity work.AxiToAxiLite
       generic map (
@@ -473,25 +503,26 @@ begin
    -------------------
    U_Reg : entity work.AppCore
       generic map (
-         TPD_G                => TPD_G,
-         APP_TYPE_G           => ite( TIMING_UDP_PORT_C /= 0, "ETH", "NONE" ),
-         AXIL_CLK_FREQUENCY_G => CLK_FREQ_C,
-         DHCP_G               => true,
-         JUMBO_G              => false,
-         USE_RSSI_G           => false,
-         USE_JTAG_G           => false,
-         USER_UDP_PORT_G      => TIMING_UDP_PORT_C,
-         BUILD_INFO_G         => BUILD_INFO_G,
-         XIL_DEVICE_G         => "7SERIES",
-         AXIL_BASE_ADDR_G     => x"40000000",
-         IP_ADDR_G            => x"410AA8C0",  -- 192.168.2.10 (ETH only)
-         MAC_ADDR_G           => ETH_MAC_C,
-         TPGMINI_G            => true, --(not isArtix),
-         GEN_TIMING_G         => true,
-         TIMING_UDP_MSG_G     => (TIMING_UDP_PORT_C /= 0),
-         TIMING_TRIG_INVERT_G => TIMING_TRIG_INVERT_C,
-         NUM_AXIL_SLAVES_G    => NUM_AXI_SLV_C,
-         NUM_TRIGS_G          => NUM_TRIGS_G
+         TPD_G                   => TPD_G,
+         APP_TYPE_G              => ite( TIMING_UDP_PORT_C /= 0, "ETH", "NONE" ),
+         AXIL_CLK_FREQUENCY_G    => CLK_FREQ_C,
+         DHCP_G                  => true,
+         JUMBO_G                 => false,
+         USE_RSSI_G              => false,
+         USE_JTAG_G              => false,
+         USER_UDP_PORT_G         => TIMING_UDP_PORT_C,
+         BUILD_INFO_G            => BUILD_INFO_G,
+         XIL_DEVICE_G            => "7SERIES",
+         AXIL_BASE_ADDR_G        => x"40000000",
+         IP_ADDR_G               => x"410AA8C0",  -- 192.168.2.10 (ETH only)
+         MAC_ADDR_G              => ETH_MAC_C,
+         TPGMINI_G               => true, --(not isArtix),
+         GEN_TIMING_G            => true,
+         TIMING_UDP_MSG_G        => (TIMING_UDP_PORT_C /= 0),
+         TIMING_GTP_HAS_COMMON_G => TIMING_GTP_HAS_COMMON_C,
+         TIMING_TRIG_INVERT_G    => TIMING_TRIG_INVERT_C,
+         NUM_AXIL_SLAVES_G       => NUM_AXI_SLV_C,
+         NUM_TRIGS_G             => NUM_TRIGS_G
       )
       port map (
          -- Clock and Reset
@@ -538,10 +569,10 @@ begin
 
    timingRecClk      <= timingOb.recClk;
    timingRecRst      <= timingOb.recRst;
-   timingIb.RxP      <= sfpRxP(0);
-   timingIb.RxN      <= sfpRxN(0);
-   sfpTxP(0)         <= timingOb.txP;
-   sfpTxN(0)         <= timingOb.txN;
+   timingIb.RxP      <= sfpRxP(1);
+   timingIb.RxN      <= sfpRxN(1);
+   sfpTxP(1)         <= timingOb.txP;
+   sfpTxN(1)         <= timingOb.txN;
    timingTrig        <= timingOb.trig;
    timingRxStat      <= timingOb.rxStat;
    timingTxStat      <= timingOb.txStat;
@@ -590,7 +621,7 @@ begin
 --         phyReady            : out slv(NUM_LANE_G-1 downto 0);
 --         sigDet              : in  slv(NUM_LANE_G-1 downto 0)                     := (others => '1');
          -- MGT Clock Port (125.00 MHz or 250.0 MHz)
-         gtRefClk            => siClk,
+         gtRefClk            => mgtRefClkBuf(1),
 --         gtClkP              : in  sl                                             := '1';
 --         gtClkN              : in  sl                                             := '0';
          gtTxPolarity(0)     => tiedToOne,
@@ -604,13 +635,36 @@ begin
    end generate;
 
    GEN_GTP_ETH : if ( isArtix ) generate
+      signal qpllLocked     : slv(1 downto 0);
+      signal qpllResetOut   : slv(1 downto 0);
+      signal qpllRefClkLost : slv(1 downto 0);
+      signal qpllRst        : slv(1 downto 0) := "00";
+      signal mmcmLocked     : sl;
+   begin
 
-   U_PL_ETH_GTP : entity work.GigEthGtp7Wrapper
+   timingIb.rxPllSel     <= TIMING_PLL_SEL_C;
+   timingIb.txPllSel     <= TIMING_PLL_SEL_C;
+   timingIb.pllLocked    <= qpllLocked    (TIMING_PLL_C );
+   timingIb.refClkLost   <= qpllRefClkLost(TIMING_PLL_C );
+   timingIb.pllRstRequest<= qpllResetOut;
+   timingIb.debug(0)     <= mmcmLocked;
+   timingIb.debug(1)     <= qpllLocked(0);
+   timingIb.debug(2)     <= qpllLocked(1);
+   timingIb.debug(3)     <= qpllRefClkLost(0);
+   timingIb.debug(4)     <= qpllRefClkLost(1);
+   qpllRst(TIMING_PLL_C) <= timingOb.pllRst;
+
+   U_PL_ETH_GTP : entity work.GigEthGtp7WrapperAdv
       generic map (
          TPD_G               => TPD_G,
          -- Clocking Configurations
          USE_GTREFCLK_G      => true, --  FALSE: gtClkP/N,  TRUE: gtRefClk
+         -- PLL1 configuration (for timing line rate and 16-bit output width)
+         PLL1_FBDIV_IN_G     => 2,
+         PLL1_FBDIV_45_IN_G  => 5,
          -- AXI-Lite Configurations
+         PLL0_REFCLK_SEL_G   => "010", -- mgtRefClk(1) / 125MHz
+         PLL1_REFCLK_SEL_G   => ite( DEVBRD_C, "010", "001" ),
          EN_AXI_REG_G        => true,
          -- AXI Streaming Configurations
          AXIS_CONFIG_G       => ETH_AXIS_CONFIG_C
@@ -639,19 +693,30 @@ begin
 --         phyReady            : out slv(NUM_LANE_G-1 downto 0);
 --         sigDet              : in  slv(NUM_LANE_G-1 downto 0)                     := (others => '1');
          -- MGT Clock Port (125.00 MHz or 250.0 MHz)
-         gtRefClk            => siClk,
+         gtRefClk            => mgtRefClk,
+         gtRefClkBufg        => mgtRefClkBuf,
 --         gtClkP              : in  sl                                             := '1';
 --         gtClkN              : in  sl                                             := '0';
+         mmcmLocked          => mmcmLocked,
+         -- QPLL
+         qpllOutClk          => timingIb.pllClk,
+         qpllOutRefClk       => timingIb.pllRefClk,
+         qpllLock            => qpllLocked,
+         qpllRefClkLost      => qpllRefClkLost,
+         qpllResetOut        => qpllResetOut,
+         qpllReset           => qpllRst,
+         -- Polarity
          gtTxPolarity(0)     => tiedToOne,
          -- MGT Ports
-         gtTxP(0)            => sfpTxP(1),
-         gtTxN(0)            => sfpTxN(1),
-         gtRxP(0)            => sfpRxP(1),
-         gtRxN(0)            => sfpRxN(1)
+         gtTxP(0)            => sfpTxP(0),
+         gtTxN(0)            => sfpTxN(0),
+         gtRxP(0)            => sfpRxP(0),
+         gtRxN(0)            => sfpRxN(0)
       );
 
    end generate;
 
+   GEN_ETH_ILA : if ( false ) generate
    U_ILA_ETH_RX : entity work.IlaAxiStream
       port map (
          axisClk         => sysClk,
@@ -673,6 +738,7 @@ begin
          mAxis           => ethTxMaster,
          sAxis           => ethTxSlave
       );
+   end generate; -- if false
 
    end generate; -- if TIMING_UDP_PORT_C /= 0
 
@@ -688,14 +754,8 @@ begin
          );
    end generate;
 
-   U_BUFG_SI : component BUFG
-      port map (
-         I   => mgtRefClk(1),
-         O   => siClk
-      );
-
-     outClk <= timingRecClk;
-     outRst <= timingRecRst;
+   outClk <= timingRecClk;
+   outRst <= timingRecRst;
 
    P_DIV_RX : process ( outClk ) is
    begin
