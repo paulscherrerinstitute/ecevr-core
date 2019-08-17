@@ -40,7 +40,7 @@ entity TE0715 is
       XVC_EN_G      : boolean := false;
       -- Did you set bit PMA_RSV2[5] of your GTX? See UG476 page 209.
       -- Otherwise the eye-scan is completely red
-      IBERT_G       : boolean := false; -- when enabled, load ip/_ibert_.xci
+      IMAGE_TYPE_G  : string  := "tbox"; -- when 'ibert', load ip/_ibert_.xci
       NUM_SFPS_G    : natural := 2;
       MIN_SFP_G     : natural := 1;
       NUM_GP_IN_G   : natural := 3;
@@ -98,12 +98,15 @@ entity TE0715 is
       -- gpIn[2] -> Marvell Ethernet PHY LED[0]
    );
 
+   constant TOGGLE_OUT_C: boolean          := ( IMAGE_TYPE_G = "toggle" );
+   constant IBERT_C     : boolean          := ( IMAGE_TYPE_G = "ibert" );
+
    attribute IO_BUFFER_TYPE : string;
    
-   attribute IO_BUFFER_TYPE of mgtTxP : signal is ite(IBERT_G, "OBUF", "NONE");
-   attribute IO_BUFFER_TYPE of mgtTxN : signal is ite(IBERT_G, "OBUF", "NONE");
-   attribute IO_BUFFER_TYPE of mgtRxP : signal is ite(IBERT_G, "IBUF", "NONE");
-   attribute IO_BUFFER_TYPE of mgtRxN : signal is ite(IBERT_G, "IBUF", "NONE");
+   attribute IO_BUFFER_TYPE of mgtTxP : signal is ite(IBERT_C, "OBUF", "NONE");
+   attribute IO_BUFFER_TYPE of mgtTxN : signal is ite(IBERT_C, "OBUF", "NONE");
+   attribute IO_BUFFER_TYPE of mgtRxP : signal is ite(IBERT_C, "IBUF", "NONE");
+   attribute IO_BUFFER_TYPE of mgtRxN : signal is ite(IBERT_C, "IBUF", "NONE");
 
 end TE0715;
 
@@ -114,8 +117,6 @@ architecture top_level of TE0715 is
   constant CLK_FREQ_C  : real             := 50.0E6;
 
   constant FEEDTHRU_C  : natural          := ite( CLK_FEEDTHRU_G, 1, 0 );
-
-  constant TOGGLE_OUT_C: boolean          := true;
 
   constant TIMING_UDP_PORT_C : natural    := 8197;
 
@@ -371,7 +372,7 @@ begin
          USB0_VBUS_PWRSELECT           => open
       );
 
-   G_COMM : if ( not IBERT_G ) generate
+   G_COMM : if ( not IBERT_C ) generate
 
       GEN_IBUF : for inst in 0 to NUM_SFPS_G - 1 generate
          U_OBUFP : component OBUF
@@ -835,9 +836,9 @@ begin
    led(3) <= sl(txDiv(27));
    led(4) <= not sl(txDiv(27));
 
-   end generate; -- if not IBERT_G
+   end generate; -- if not IBERT_C
 
-   GEN_IBERT : if ( IBERT_G ) generate
+   GEN_IBERT : if ( IBERT_C ) generate
 
    GEN_BUFS : for i in 1 downto 0 generate
      signal wxx : sl;
@@ -891,6 +892,6 @@ begin
          OB => timingRecClkN
       );
 
-   end generate; -- if IBERT_G
+   end generate; -- if IBERT_C
 
 end top_level;
