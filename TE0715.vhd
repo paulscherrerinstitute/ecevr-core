@@ -115,6 +115,8 @@ architecture top_level of TE0715 is
 
   constant FEEDTHRU_C  : natural          := ite( CLK_FEEDTHRU_G, 1, 0 );
 
+  constant TOGGLE_OUT_C: boolean          := true;
+
   constant TIMING_UDP_PORT_C : natural    := 8197;
 
   constant ETH_MAC_C   : slv(47 downto 0) := x"aa0300564400";  -- 00:44:56:00:03:01 (ETH only)
@@ -285,7 +287,7 @@ component processing_system7_0
 
    signal   timingTxClk     : sl;
 
-   signal   trigReg         : slv(NUM_TRIGS_G - 1 downto 0);
+   signal   trigReg         : slv(NUM_TRIGS_G - 1 downto 0) := (others => '0');
    signal   recClk2         : slv(1 downto 0) := "00";
 
    signal   refClkDbg       : slv(1 downto 0);
@@ -709,13 +711,25 @@ begin
    end process P_DIV_TX;
 
 
+   GEN_TRIG_OUT : if ( not TOGGLE_OUT_C ) generate
 
    P_TRIG_REG : process ( timingTrig ) is
    begin
---      if ( rising_edge( outClk ) ) then
-         trigReg <= timingTrig.trigPulse(trigReg'range);
---      end if;
+      trigReg <= timingTrig.trigPulse(trigReg'range);
    end process P_TRIG_REG;
+
+   end generate;
+
+   GEN_TOGGLE_OUT : if ( TOGGLE_OUT_C ) generate
+
+   P_TRIG_REG : process ( outClk ) is
+   begin
+      if ( rising_edge( outClk ) ) then
+         trigReg <= not trigReg;
+      end if;
+   end process P_TRIG_REG;
+
+   end generate;
 
    U_ODDR : component ODDR
       generic map (
