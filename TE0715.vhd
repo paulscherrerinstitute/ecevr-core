@@ -61,7 +61,7 @@ entity TE0715 is
       CLK_FEEDTHRU_G: boolean := false;
       -- Did you set bit PMA_RSV2[5] of your GTX? See UG476 page 209.
       -- Otherwise the eye-scan is completely red
-      PRJ_VARIANT_G : string  := "deflt"; -- when enabled, load ip/_ibert_.xci
+      PRJ_VARIANT_G : string  := "deflt"; -- when 'ibert', load ip/_ibert_.xci
       NUM_SFPS_G    : natural := 2;
       MIN_SFP_G     : natural := 1;
       NUM_GP_IN_G   : natural := 3;
@@ -120,8 +120,9 @@ entity TE0715 is
       -- gpIn[2] -> Marvell Ethernet PHY LED[0]
    );
 
-   constant  IBERT_C          : boolean := ite( PRJ_VARIANT_G = "ibert", true, false );
-   constant  DEVBRD_C         : boolean := ite( PRJ_VARIANT_G = "devbd", true, false );
+   constant  IBERT_C          : boolean := ( PRJ_VARIANT_G = "ibert"  );
+   constant  DEVBRD_C         : boolean := ( PRJ_VARIANT_G = "devbd"  );
+   constant  COPY_CLOCKS_C    : boolean := ( PRJ_VARIANT_G = "toggle" );
 
    constant  TIMING_PLL_C     : natural range 0 to 1 := 1;
    constant  TIMING_PLL_SEL_C : slv(1 downto 0) := ite( TIMING_PLL_C = 0, "00", "11" );
@@ -150,8 +151,6 @@ entity TE0715 is
 end TE0715;
 
 architecture top_level of TE0715 is
-
-  constant COPY_CLOCKS_C : boolean        := false;
 
   -- must match CONFIG.PCW_NUM_F2P_INTR_INPUTS {16} setting for IP generation
   constant NUM_IRQS_C  : natural          := 16;
@@ -795,10 +794,11 @@ begin
 
       P_TRIG_REG : process ( timingTrig ) is
       begin
---         if ( rising_edge( outClk ) ) then
-            trigReg <= timingTrig.trigPulse(trigReg'range);
---         end if;
+         trigReg <= timingTrig.trigPulse(trigReg'range);
       end process P_TRIG_REG;
+
+   end generate;
+
    end generate;
 
    U_ODDR : component ODDR
