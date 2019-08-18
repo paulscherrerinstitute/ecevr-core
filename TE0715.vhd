@@ -799,8 +799,6 @@ begin
 
    end generate;
 
-   end generate;
-
    U_ODDR : component ODDR
       generic map (
          DDR_CLK_EDGE => "SAME_EDGE"
