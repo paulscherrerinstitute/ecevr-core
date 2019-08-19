@@ -625,10 +625,10 @@ begin
 --         gtClkN              : in  sl                                             := '0';
          gtTxPolarity(0)     => tiedToOne,
          -- MGT Ports
-         gtTxP(0)            => sfpTxP(1),
-         gtTxN(0)            => sfpTxN(1),
-         gtRxP(0)            => sfpRxP(1),
-         gtRxN(0)            => sfpRxN(1)
+         gtTxP(0)            => sfpTxP(0),
+         gtTxN(0)            => sfpTxN(0),
+         gtRxP(0)            => sfpRxP(0),
+         gtRxN(0)            => sfpRxN(0)
       );
 
    end generate;
