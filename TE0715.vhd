@@ -201,7 +201,7 @@ architecture top_level of TE0715 is
   signal   timingIb    : TimingWireIbType := TIMING_WIRE_IB_INIT_C;
   signal   timingOb    : TimingWireObType := TIMING_WIRE_OB_INIT_C;
 
-COMPONENT ibert_7series_gtx_0
+COMPONENT ibert_7series_gt_0
   PORT (
     TXN_O : OUT STD_LOGIC_VECTOR(3 DOWNTO 0);
     TXP_O : OUT STD_LOGIC_VECTOR(3 DOWNTO 0);
@@ -907,7 +907,7 @@ begin
 
    GEN_IBERT : if ( IBERT_C ) generate
 
-   U_IBERT : component ibert_7series_gtx_0
+   U_IBERT : component ibert_7series_gt_0
       PORT MAP (
          TXN_O          => mgtTxN,
          TXP_O          => mgtTxP,
