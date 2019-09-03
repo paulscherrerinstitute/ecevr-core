@@ -334,7 +334,7 @@ component processing_system7_0
 
 begin
 
-   assert PRJ_VARIANT_G = "deflt" or PRJ_VARIANT_G = "ibert" or PRJ_VARIANT_G = "devbd" severity failure;
+   assert PRJ_VARIANT_G = "deflt" or PRJ_VARIANT_G = "ibert" or PRJ_VARIANT_G = "devbd" or PRJ_VARIANT_G = "toggle" severity failure;
 
    sysRst <= not sysRstN;
 
