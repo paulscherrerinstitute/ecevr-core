@@ -53,20 +53,20 @@ use unisim.vcomponents.all;
 
 entity TE0715 is
    generic (
-      TPD_G         : time    := 1 ns;
-      BUILD_INFO_G  : BuildInfoType;
-      SIM_SPEEDUP_G : boolean := false;
-      SIMULATION_G  : boolean := false;
-      NUM_TRIGS_G   : natural := 7;
-      CLK_FEEDTHRU_G: boolean := false;
+      TPD_G             : time    := 1 ns;
+      BUILD_INFO_G      : BuildInfoType;
+      SIM_SPEEDUP_G     : boolean := false;
+      SIMULATION_G      : boolean := false;
+      NUM_TRIGS_G       : natural := 7;
+      CLK_FEEDTHRU_G    : boolean := false;
       -- Did you set bit PMA_RSV2[5] of your GTX? See UG476 page 209.
       -- Otherwise the eye-scan is completely red
-      PRJ_VARIANT_G : string  := "deflt"; -- when 'ibert', load ip/_ibert_.xci
-      NUM_SFPS_G    : natural := 2;
-      MIN_SFP_G     : natural := 1;
-      NUM_GP_IN_G   : natural := 3;
-      NUM_LED_G     : natural := 5;
-      PRJ_PART_G    : string
+      PRJ_VARIANT_G     : string  := "deflt"; -- when 'ibert', load ip/_ibert_.xci
+      NUM_SFPS_G        : natural := 2;
+      NUM_GP_IN_G       : natural := 3;
+      NUM_LED_G         : natural := 5;
+      PRJ_PART_G        : string;
+      TIMING_ETH_MGT_G  : natural range 0 to 2 := 2 -- which MGT to use for the timing ethernet stream
    );
    port (
       DDR_addr          : inout STD_LOGIC_VECTOR ( 14 downto 0 );
@@ -172,6 +172,8 @@ architecture top_level of TE0715 is
   constant BLINK_TIME_C         : natural := natural( CLK_FREQ_C * 0.2 );
   constant BLINK_TIME_UNS_C     : unsigned(bitSize(BLINK_TIME_C) - 1 downto 0) := to_unsigned(BLINK_TIME_C, bitSize(BLINK_TIME_C));
 
+  constant TIMING_SFP_MGT_C     : natural := ite( TIMING_ETH_MGT_G = 1, 2, 1 );
+
   signal   mgtRefClk   : slv(1 downto 0);
   signal   mgtRefClkBuf: slv(1 downto 0);
 
@@ -190,10 +192,15 @@ architecture top_level of TE0715 is
 
   signal   macAddr     : slv(47 downto 0);
 
-  signal   sfpRxP      : slv(NUM_SFPS_G - 1 downto 0);
-  signal   sfpRxN      : slv(NUM_SFPS_G - 1 downto 0);
-  signal   sfpTxP      : slv(NUM_SFPS_G - 1 downto 0);
-  signal   sfpTxN      : slv(NUM_SFPS_G - 1 downto 0);
+  signal   timingSfpRxP: sl;
+  signal   timingSfpRxN: sl;
+  signal   timingSfpTxP: sl;
+  signal   timingSfpTxN: sl;
+
+  signal   timingEthRxP: sl;
+  signal   timingEthRxN: sl;
+  signal   timingEthTxP: sl;
+  signal   timingEthTxN: sl;
 
   signal   ethTxMaster, ethRxMaster : AxiStreamMasterType;
   signal   ethTxSlave , ethRxSlave  : AxiStreamSlaveType;
@@ -434,28 +441,26 @@ begin
 
    G_COMM : if ( not IBERT_C ) generate
 
-      GEN_IBUF : for inst in 0 to NUM_SFPS_G - 1 generate
-         U_OBUFP : component OBUF
-            port map (
-               I => sfpTxP(             inst ),
-               O => mgtTxP( MIN_SFP_G + inst )
-            );
-         U_OBUFN : component OBUF
-            port map (
-               I => sfpTxN(             inst ),
-               O => mgtTxN( MIN_SFP_G + inst )
-            );
-         U_IBUFP : component IBUF
-            port map (
-               I => mgtRxP( MIN_SFP_G + inst ),
-               O => sfpRxP(             inst )
-            );
-         U_IBUFN : component IBUF
-            port map (
-               I => mgtRxN( MIN_SFP_G + inst ),
-               O => sfpRxN(             inst )
-            );
-      end generate;
+      U_OBUF_TIMING_SFP_P : component OBUF
+         port map (
+            I => timingSfpTxP,
+            O => mgtTxP( TIMING_SFP_MGT_C )
+         );
+      U_OBUF_TIMING_SFP_N : component OBUF
+         port map (
+            I => timingSfpTxN,
+            O => mgtTxN( TIMING_SFP_MGT_C )
+         );
+      U_IBUF_TIMING_SFP_P : component IBUF
+         port map (
+            I => mgtRxP( TIMING_SFP_MGT_C ),
+            O => timingSfpRxP
+         );
+      U_IBUF_TIMING_SFP_N : component IBUF
+         port map (
+            I => mgtRxN( TIMING_SFP_MGT_C ),
+            O => timingSfpRxN
+         );
 
 --   U_Ila_Axi : entity work.IlaAxi4SurfWrapper
 --      port map (
@@ -568,10 +573,10 @@ begin
 
    timingRecClk      <= timingOb.recClk;
    timingRecRst      <= timingOb.recRst;
-   timingIb.RxP      <= sfpRxP(1);
-   timingIb.RxN      <= sfpRxN(1);
-   sfpTxP(1)         <= timingOb.txP;
-   sfpTxN(1)         <= timingOb.txN;
+   timingIb.RxP      <= timingSfpRxP,
+   timingIb.RxN      <= timingSfpRxN,
+   timingSfpTxP      <= timingOb.txP;
+   timingSfpTxN      <= timingOb.txN;
    timingTrig        <= timingOb.trig;
    timingRxStat      <= timingOb.rxStat;
    timingTxStat      <= timingOb.txStat;
@@ -583,6 +588,27 @@ begin
       constant ETH_AXIS_CONFIG_C      : AxiStreamConfigArray(3 downto 0) := (others => EMAC_AXIS_CONFIG_C);
 
    begin
+
+      U_OBUF_TIMING_ETH_P : component OBUF
+         port map (
+            I => timingEthTxP,
+            O => mgtTxP( TIMING_ETH_MGT_G )
+         );
+      U_OBUF_TIMING_ETH_N : component OBUF
+         port map (
+            I => timingEthTxN,
+            O => mgtTxN( TIMING_ETH_MGT_G )
+         );
+      U_IBUF_TIMING_ETH_P : component IBUF
+         port map (
+            I => mgtRxP( TIMING_ETH_MGT_G ),
+            O => timingEthRxP
+         );
+      U_IBUF_TIMING_ETH_N : component IBUF
+         port map (
+            I => mgtRxN( TIMING_ETH_MGT_G ),
+            O => timingEthRxN
+         );
 
    GEN_GTX_ETH : if ( not isArtix ) generate
 
@@ -625,10 +651,10 @@ begin
 --         gtClkN              : in  sl                                             := '0';
          gtTxPolarity(0)     => tiedToOne,
          -- MGT Ports
-         gtTxP(0)            => sfpTxP(0),
-         gtTxN(0)            => sfpTxN(0),
-         gtRxP(0)            => sfpRxP(0),
-         gtRxN(0)            => sfpRxN(0)
+         gtTxP(0)            => timingEthTxP,
+         gtTxN(0)            => timingEthTxN,
+         gtRxP(0)            => timingEthRxP,
+         gtRxN(0)            => timingEthRxN
       );
 
    end generate;
@@ -707,10 +733,10 @@ begin
          -- Polarity
          gtTxPolarity(0)     => tiedToOne,
          -- MGT Ports
-         gtTxP(0)            => sfpTxP(0),
-         gtTxN(0)            => sfpTxN(0),
-         gtRxP(0)            => sfpRxP(0),
-         gtRxN(0)            => sfpRxN(0)
+         gtTxP(0)            => timingEthTxP,
+         gtTxN(0)            => timingEthTxN,
+         gtRxP(0)            => timingEthRxP,
+         gtRxN(0)            => timingEthRxN
       );
 
    end generate;
