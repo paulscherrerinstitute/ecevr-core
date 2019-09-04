@@ -573,8 +573,8 @@ begin
 
    timingRecClk      <= timingOb.recClk;
    timingRecRst      <= timingOb.recRst;
-   timingIb.RxP      <= timingSfpRxP,
-   timingIb.RxN      <= timingSfpRxN,
+   timingIb.RxP      <= timingSfpRxP;
+   timingIb.RxN      <= timingSfpRxN;
    timingSfpTxP      <= timingOb.txP;
    timingSfpTxN      <= timingOb.txN;
    timingTrig        <= timingOb.trig;
