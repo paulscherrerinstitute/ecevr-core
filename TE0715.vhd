@@ -143,10 +143,10 @@ entity TE0715 is
    attribute IO_BUFFER_TYPE of mgtRxP : signal is ite(IBERT_C, "IBUF", "NONE");
    attribute IO_BUFFER_TYPE of mgtRxN : signal is ite(IBERT_C, "IBUF", "NONE");
 
-   attribute IOSTANDARD     of timingRecClkP : signal is ite( isArtix, "DIFF_HSTL_I_18", "LVDS" );
-   attribute IOSTANDARD     of timingRecClkN : signal is ite( isArtix, "DIFF_HSTL_I_18", "LVDS" );
-   attribute SLEW           of timingRecClkP : signal is ite( isArtix, "FAST",           ""     );
-   attribute SLEW           of timingRecClkN : signal is ite( isArtix, "FAST",           ""     );
+   attribute IOSTANDARD     of timingRecClkP : signal is ite( isArtix or true, "DIFF_HSTL_I_18", "LVDS" );
+   attribute IOSTANDARD     of timingRecClkN : signal is ite( isArtix or true, "DIFF_HSTL_I_18", "LVDS" );
+   attribute SLEW           of timingRecClkP : signal is ite( isArtix or true, "FAST",           ""     );
+   attribute SLEW           of timingRecClkN : signal is ite( isArtix or true, "FAST",           ""     );
 
 end TE0715;
 
