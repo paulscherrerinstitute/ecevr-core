@@ -121,7 +121,7 @@ entity TE0715 is
    );
 
    constant  IBERT_C          : boolean := ( PRJ_VARIANT_G = "ibert"  );
-   constant  DEVBRD_C         : boolean := ( PRJ_VARIANT_G = "devbd" or PRJ_VARIANT = "ecevr" );
+   constant  DEVBRD_C         : boolean := ( PRJ_VARIANT_G = "devbd" or PRJ_VARIANT_G = "ecevr" );
    constant  COPY_CLOCKS_C    : boolean := ( PRJ_VARIANT_G = "toggle" );
 
    constant  TIMING_PLL_C     : natural range 0 to 1 := 1;
@@ -341,7 +341,7 @@ component processing_system7_0
 
 begin
 
-   assert PRJ_VARIANT_G = "deflt" or PRJ_VARIANT_G = "ibert" or PRJ_VARIANT_G = "devbd" or PRJ_VARIANT_G = "toggle" or PRJ_VARIANT = "ecevr" severity failure;
+   assert PRJ_VARIANT_G = "deflt" or PRJ_VARIANT_G = "ibert" or PRJ_VARIANT_G = "devbd" or PRJ_VARIANT_G = "toggle" or PRJ_VARIANT_G = "ecevr" severity failure;
 
    sysRst <= not sysRstN;
 
