@@ -63,7 +63,7 @@ entity TE0715 is
       -- Otherwise the eye-scan is completely red
       PRJ_VARIANT_G     : string  := "deflt"; -- when 'ibert', load ip/_ibert_.xci
       NUM_SFPS_G        : natural := 2;
-      NUM_GP_IN_G       : natural := 3;
+      NUM_GP_IN_G       : natural := 2; -- marvell led0 output rendered unusable by buffer on TE module
       NUM_LED_G         : natural := 5;
       PRJ_PART_G        : string;
       TIMING_ETH_MGT_G  : natural range 0 to 2 := 2 -- which MGT to use for the timing ethernet stream
@@ -117,7 +117,7 @@ entity TE0715 is
       gpIn              : in    slv(NUM_GP_IN_G - 1 downto 0)
       -- gpIn[0] -> Si5344 LOLb
       -- gpIn[1] -> Si5344 INTRb
-      -- gpIn[2] -> Marvell Ethernet PHY LED[0]
+      -- gpIn[2] -> Marvell Ethernet PHY LED[0]; B34_L9_P
    );
 
    constant  IBERT_C          : boolean := ( PRJ_VARIANT_G = "ibert"  );
