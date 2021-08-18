@@ -63,7 +63,7 @@ entity TE0715 is
       CLK_FEEDTHRU_G    : boolean := false;
       -- Did you set bit PMA_RSV2[5] of your GTX? See UG476 page 209.
       -- Otherwise the eye-scan is completely red
-      PRJ_VARIANT_G     : string  := "devbd"; -- when 'ibert', load ip/_ibert_.xci
+      PRJ_VARIANT_G     : string  := "tbox"; -- when 'ibert', load ip/_ibert_.xci
       NUM_SFPS_G        : natural := 2;
       PRJ_PART_G        : string;
       TIMING_ETH_MGT_G  : natural range 0 to 2 := 2 -- which MGT to use for the timing ethernet stream
@@ -113,8 +113,8 @@ entity TE0715 is
       B13_L6_N          : inout std_logic := 'Z';
       B13_L7_P          : inout std_logic := 'Z';
       B13_L7_N          : inout std_logic := 'Z';
-      B13_L8_P          : inout std_logic := 'Z';
-      B13_L8_N          : inout std_logic := 'Z';
+      B13_L8_P          : out   std_logic := 'Z';
+      B13_L8_N          : out   std_logic := 'Z';
       B13_L9_P          : inout std_logic := 'Z';
       B13_L9_N          : inout std_logic := 'Z';
       B13_L10_P         : inout std_logic := 'Z';
@@ -125,10 +125,10 @@ entity TE0715 is
       B13_L12_N         : inout std_logic := 'Z';
       B13_L13_P         : inout std_logic := 'Z';
       B13_L13_N         : inout std_logic := 'Z';
-      B13_L14_P         : inout std_logic := 'Z';
-      B13_L14_N         : inout std_logic := 'Z';
-      B13_L15_P         : inout std_logic := 'Z';
-      B13_L15_N         : inout std_logic := 'Z';
+      B13_L14_P         : out   std_logic := 'Z';
+      B13_L14_N         : out   std_logic := 'Z';
+      B13_L15_P         : out   std_logic := 'Z';
+      B13_L15_N         : out   std_logic := 'Z';
       B13_L16_P         : inout std_logic := 'Z';
       B13_L16_N         : inout std_logic := 'Z';
       B13_L17_P         : inout std_logic := 'Z';
@@ -137,14 +137,14 @@ entity TE0715 is
       B13_L18_N         : inout std_logic := 'Z';
       B13_L19_P         : inout std_logic := 'Z';
       B13_L19_N         : inout std_logic := 'Z';
-      B13_L20_P         : inout std_logic := 'Z';
-      B13_L20_N         : inout std_logic := 'Z';
-      B13_L21_P         : inout std_logic := 'Z';
-      B13_L21_N         : inout std_logic := 'Z';
-      B13_L22_P         : inout std_logic := 'Z';
-      B13_L22_N         : inout std_logic := 'Z';
-      B13_L23_P         : inout std_logic := 'Z';
-      B13_L23_N         : inout std_logic := 'Z';
+      B13_L20_P         : out   std_logic := 'Z';
+      B13_L20_N         : out   std_logic := 'Z';
+      B13_L21_P         : out   std_logic := 'Z';
+      B13_L21_N         : out   std_logic := 'Z';
+      B13_L22_P         : out   std_logic := 'Z';
+      B13_L22_N         : out   std_logic := 'Z';
+      B13_L23_P         : out   std_logic := 'Z';
+      B13_L23_N         : out   std_logic := 'Z';
       B13_L24_P         : inout std_logic := 'Z';
       B13_L24_N         : inout std_logic := 'Z';
       B13_L25           : inout std_logic := 'Z';
@@ -167,8 +167,8 @@ entity TE0715 is
       B34_L8_N          : inout std_logic := 'Z';
       B34_L9_P          : inout std_logic := 'Z';
       B34_L9_N          : inout std_logic := 'Z';
-      B34_L10_P         : inout std_logic := 'Z';
-      B34_L10_N         : inout std_logic := 'Z';
+      B34_L10_P         : out   std_logic := 'Z';
+      B34_L10_N         : out   std_logic := 'Z';
       B34_L11_P         : inout std_logic := 'Z';
       B34_L11_N         : inout std_logic := 'Z';
       B34_L12_P         : inout std_logic := 'Z';

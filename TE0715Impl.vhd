@@ -54,11 +54,11 @@ library unisim;
 use unisim.vcomponents.all;
 
 architecture top_level of TE0715 is
-   constant  ECEVR_C          : boolean := ( PRJ_VARIANT_G(1 to 5) = "ecevr" );
+   constant  ECEVR_C          : boolean := ( PRJ_VARIANT_G'length > 4 and PRJ_VARIANT_G(1 to 5) = "ecevr" );
    constant  IBERT_C          : boolean := ( PRJ_VARIANT_G = "ibert"  );
    constant  DEVBRD_C         : boolean := ( PRJ_VARIANT_G = "devbd" or ECEVR_C );
    constant  COPY_CLOCKS_C    : boolean := ( PRJ_VARIANT_G = "toggle" );
-   constant  TBOX_C           : boolean := ( PRJ_VARIANT_G = "toggle" or PRJ_VARIANT_G = "deflt" );
+   constant  TBOX_C           : boolean := ( PRJ_VARIANT_G = "toggle" or PRJ_VARIANT_G = "tbox" );
 
    constant  TIMING_PLL_C     : natural range 0 to 1 := 1;
    constant  TIMING_PLL_SEL_C : slv(1 downto 0) := ite( TIMING_PLL_C = 0, "00", "11" );
@@ -72,9 +72,9 @@ architecture top_level of TE0715 is
 
    function numLed(var : string) return natural is
    begin
-      if    ( PRJ_VARIANT_G = "deflt" or PRJ_VARIANT_G = "toggle" ) then
+      if    ( TBOX_C ) then
          return 5;
-      elsif ( PRJ_VARIANT_G = "ecevr" ) then
+      elsif ( ECEVR_C ) then
          return 11;
       else
          return 0;
@@ -303,9 +303,7 @@ architecture top_level of TE0715 is
    signal   timingTrig      : TimingTrigType;
    signal   timingRecClk    : sl;
    signal   timingRecRst    : sl;
-   signal   timingRecClkLoc : sl;
-   signal   timingRecClkP   : sl := '0';
-   signal   timingRecClkN   : sl := '1';
+   signal   outClkLoc       : sl := '0';
 
    signal   timingRxStat    : TimingPhyStatusType;
    signal   timingTxStat    : TimingPhyStatusType;
@@ -315,26 +313,24 @@ architecture top_level of TE0715 is
    signal   trigReg         : slv(NUM_TRIGS_G - 1 downto 0) := TIMING_TRIG_INVERT_C;
    signal   recClk2         : slv(1 downto 0) := "00";
 
-   signal   spi0_ss_d        : slv(SPI_MAX_SS_C - 1 downto 0)      := (others => '1');
+   signal   spi0_ss_d       : slv(SPI_MAX_SS_C - 1 downto 0)      := (others => '1');
 
-   signal   spi_ss0_i        : slv(NUM_SPI_C - 1 downto 0) := (others => '1'); -- AR# 47511
+   signal   spi_ss0_i       : slv(NUM_SPI_C - 1 downto 0) := (others => '1'); -- AR# 47511
 
+   signal   ila1            : slv(63 downto 0) := (others => '0');
 
    attribute IOB : string;
    attribute IOB of trigReg : signal is "TRUE";
    attribute IOB of recClk2 : signal is "TRUE";
 
-   attribute IOSTANDARD     of B34_L10_P     : signal is ite( isArtix, "DIFF_HSTL_I_18", "LVDS" );
-   attribute IOSTANDARD     of B34_L10_N     : signal is ite( isArtix, "DIFF_HSTL_I_18", "LVDS" );
-   attribute SLEW           of B34_L10_P     : signal is ite( isArtix, "FAST",           ""     );
-   attribute SLEW           of B34_L10_N     : signal is ite( isArtix, "FAST",           ""     );
-
-   attribute FLOX           : string;
-   attribute FLOX           of B34_L10_P     : signal is "BLOX";
+   attribute FLOX           : real;
+   attribute FLOX           of B34_L10_P     : signal is 1.2345;
 
 begin
 
-   assert PRJ_VARIANT_G = "deflt" or PRJ_VARIANT_G = "ibert" or PRJ_VARIANT_G = "devbd" or PRJ_VARIANT_G = "toggle" or PRJ_VARIANT_G = "ecevr" severity failure;
+   assert    PRJ_VARIANT_G = "tbox"      or PRJ_VARIANT_G = "ibert"     or PRJ_VARIANT_G = "devbd" or PRJ_VARIANT_G = "toggle"
+          or PRJ_VARIANT_G = "ecevr-spi" or PRJ_VARIANT_G = "ecevr-dio"
+   severity failure;
 
    sysRst <= not sysRstN;
 
@@ -448,7 +444,9 @@ begin
          probe0(14) => spi0_ss_d(2),
          probe0(15) => spiOb(0).o_ss(2),
 
-         probe0(63 downto 16) => (others => '0')
+         probe0(63 downto 16) => (others => '0'),
+
+         probe1     => ila1
       );
 
    GEN_BUFDS : for i in 1 downto 0 generate
@@ -804,10 +802,10 @@ begin
 
    cpuIrqs(IRQ_MAX_C - 1 downto 0) <= appIrqs(IRQ_MAX_C - 1 downto 0);
 
-   GEN_OUTBUFDS : for i in diffOut'left - FEEDTHRU_C downto 0 generate
+   GEN_DIFF_OUT : for i in diffOut'left - FEEDTHRU_C downto 0 generate
    begin
       diffOut(i) <= trigReg(i);
-   end generate GEN_OUTBUFDS;
+   end generate GEN_DIFF_OUT;
 
    outClk <= timingRecClk;
    outRst <= timingRecRst;
@@ -864,16 +862,9 @@ begin
          CE  => '1',
          D1  => '0', -- sample on negative clock edge
          D2  => '1',
-         Q   => timingRecClkLoc,
+         Q   => outClkLoc,
          S   => '0',
          R   => '0'
-      );
-
-   U_RECCLKBUF : component OBUFDS
-      port map (
-         I  => timingRecClkLoc,
-         O  => timingRecClkP,
-         OB => timingRecClkN
       );
 
    GEN_CLK_FEEDTHRU : if ( CLK_FEEDTHRU_G and (diffOut'length > 0) ) generate
@@ -942,29 +933,21 @@ begin
          SYSCLK_I       => sysClk
       );
 
-   U_RECCLKBUF : component OBUFDS
-      port map (
-         I  => '0',
-         O  => timingRecClkP,
-         OB => timingRecClkN
-      );
-
    end generate GEN_IBERT;
 
    -- common signals (on TE0715 module)
    
    psEthPhyLed0 <= B34_L9_P;
 
-   B34_L10_P    <= timingRecClkP;
-   B34_L10_N    <= timingRecClkN;
-
    GEN_IOMAP_TBOX : if ( TBOX_C ) generate
+
       GEN_SFPCTL_0 : if ( NUM_SFPS_G > 0 ) generate
          B13_L4_P        <= sfp_tx_dis(0);
          sfp_tx_flt  (0) <= B13_L4_N;
          sfp_los     (0) <= B13_L6_P;
          sfp_presentb(0) <= B13_L6_N;
       end generate GEN_SFPCTL_0;
+
       GEN_SFPCTL_1 : if ( NUM_SFPS_G > 1 ) generate
          B13_L10_P       <= sfp_tx_dis(1);
          sfp_tx_flt  (1) <= B13_L10_N;
@@ -1009,27 +992,39 @@ begin
       B13_L2_N    <= led(3); -- orange/anode - green/cathode in eth connector
       B13_L1_P    <= led(4); -- orange/cathode - green/anode in eth connector
 
+      U_RECCLKBUF : component OBUFDS
+         generic map (
+            IOSTANDARD => ite( isArtix, "DIFF_HSTL_I_18", "LVDS" ),
+            SLEW       => ite( isArtix, "FAST",           ""     )
+         )
+         port map (
+            I  => outClkLoc,
+            O  => B34_L10_P,
+            OB => B34_L10_N
+         );
+
       U_DIFFOUT_BUF : ZynqOBufDS
          generic map (
+            W_G        => diffOut'length,
             IOSTANDARD => "TMDS_33"
          )
          port map (
-            io(0).x => B13_L8_P,
-            io(0).b => B13_L8_N,
-            io(1).x => B13_L23_P,
-            io(1).b => B13_L23_N,
-            io(2).x => B13_L14_P,
-            io(2).b => B13_L14_N,
-            io(3).x => B13_L21_P,
-            io(3).b => B13_L21_N,
-            io(4).x => B13_L20_P,
-            io(4).b => B13_L20_N,
-            io(5).x => B13_L15_P,
-            io(5).b => B13_L15_N,
-            io(6).x => B13_L22_P,
-            io(6).b => B13_L22_N,
+            o(0).x => B13_L8_P,
+            o(0).b => B13_L8_N,
+            o(1).x => B13_L23_P,
+            o(1).b => B13_L23_N,
+            o(2).x => B13_L14_P,
+            o(2).b => B13_L14_N,
+            o(3).x => B13_L21_P,
+            o(3).b => B13_L21_N,
+            o(4).x => B13_L20_P,
+            o(4).b => B13_L20_N,
+            o(5).x => B13_L15_P,
+            o(5).b => B13_L15_N,
+            o(6).x => B13_L22_P,
+            o(6).b => B13_L22_N,
 
-            o       => diffOut
+            i      => diffOut
          );
 
    end generate GEN_IOMAP_TBOX;
@@ -1037,9 +1032,67 @@ begin
    GEN_IOMAP_ECEVR : if ( ECEVR_C ) generate
 
       signal fpga_i : std_logic_vector(43 downto 0);
-      signal fpga_o : std_logic_vector(43 downto 0) := (others => 'Z');
+      signal fpga_o : std_logic_vector(43 downto 0) := (others => '0');
+      signal fpga_t : std_logic_vector(43 downto 0) := (others => '1');
 
    begin
+
+      ila1(43 downto 0) <= fpga_i;
+
+      GEN_IOBUF : ZynqIOBuf
+         generic map (
+            W_G => fpga_i'length
+         )
+         port map (
+            i      => fpga_o,
+            t      => fpga_t,
+            o      => fpga_i,
+
+            io( 0) => B34_L15_N,
+            io( 1) => B34_L15_P,
+            io( 2) => B34_L18_N,
+            io( 3) => B34_L2_P,
+            io( 4) => B34_L2_N,
+            io( 5) => B34_L12_P,
+            io( 6) => B34_L6_N,
+            io( 7) => B34_L6_P,
+            io( 8) => B34_L8_P,
+            io( 9) => B35_L16_P,
+            io(10) => B35_L16_N,
+            io(11) => B34_L7_N,
+            io(12) => B35_L18_N,
+            io(13) => B35_L18_P,
+            io(14) => B35_L21_P,
+            io(15) => B35_L15_N,
+            io(16) => B35_L15_P,
+            io(17) => B35_L8_P,
+            io(18) => B35_L13_P,
+            io(19) => B35_L13_N,
+            io(20) => B35_L11_N,
+            io(21) => B35_L14_P,
+            io(22) => B35_L14_N,
+            io(23) => B35_L3_N,
+            io(24) => B35_L12_P,
+            io(25) => B35_L12_N,
+            io(26) => B35_L7_N,
+            io(27) => B35_L23_N,
+            io(28) => B35_L23_P,
+            io(29) => B35_L4_P,
+            io(30) => B35_L2_N,
+            io(31) => B35_L2_P,
+            io(32) => B35_L5_N,
+            io(33) => B35_L17_P,
+            io(34) => B35_L17_N,
+            io(35) => B35_L6_N,
+            io(36) => B35_L24_P,
+            io(37) => B35_L24_N,
+            io(38) => B35_L0,
+            io(39) => B35_L9_N,
+            io(40) => B35_L9_P,
+            io(41) => B35_L22_N,
+            io(42) => B35_L22_P,
+            io(43) => B35_L10_N
+         );
 
       GEN_SFPCTL_0 : if ( NUM_SFPS_G > 0 ) generate
          B13_L6_N        <= sfp_tx_dis(0);
@@ -1050,31 +1103,46 @@ begin
 
       GEN_IOMAP_SPIBUF : if ( PRJ_VARIANT_G = "ecevr-spi" ) generate
 
-      U_SPI0_BUF : entity work.ZynqSpiIOBuf
-         generic map (
-            NUM_SPI_SS_G => 2
-         )
-         port map (
-            io.sclk      => B35_L15_N,
-            io.mosi      => B35_L16_N,
-            io.miso      => B34_L12_P,
-            ioSS(0)      => B34_L17_P, -- unused
-            ioSS(1)      => B35_L9_P,
-            i            => spiOb(0),
-            o            => spiIb(0),
-            o_ss0        => spi0_ss_d
-         );
+         fpga_o(10)    <= spiOb(0).o.mosi;
+         fpga_t(10)    <= spiOb(0).t.mosi;
+         spiIb(0).mosi <= fpga_i(10);
+
+         fpga_o(15)    <= spiOb(0).o.sclk;
+         fpga_t(15)    <= spiOb(0).t.sclk;
+         spiIb(0).sclk <= fpga_i(15);
+
+         fpga_o( 5)    <= spiOb(0).o.miso;
+         fpga_t( 5)    <= spiOb(0).t.miso;
+         spiIb(0).miso <= fpga_i( 5);
+
+         fpga_o(40)    <= spiOb(0).o_ss(1);
+         fpga_t(40)    <= '0';
 
       end generate GEN_IOMAP_SPIBUF;
 
       -- led(0..7) left -> right; 4 red; 4 grn
-      led(7 downto 0) <= (others => '0');
+      led(0)          <= fpga_i(35); -- gpio 0
+      led(1)          <= fpga_i(36); -- gpio 1
+      led(2)          <= fpga_i(37); -- gpio 2
+      led(3)          <= fpga_i(39); -- gpio 3
+      led(6 downto 4) <= (others => '0');
+      led(7)          <= not timingTxStat.resetDone;
       led(8)          <= '0'; -- ylo led in PS-ethernet connector
       led(9)          <= '0'; -- grn-cat/amb-ano in PS-ethernet conn.
       led(10)         <= '0'; -- grn-ano/amb-cat in PS-ethernet conn.
 
-      B13_L18_P <= not timingTxStat.resetDone;
-      B34_L15_P <= timingTxStat.resetDone;
+      -- RST#
+      fpga_o(1) <= timingTxStat.resetDone;
+      fpga_t(1) <= '0';
+
+      -- OE_EXT
+      fpga_o(19) <= '1';
+      fpga_t(19) <= '0';
+
+      -- IRQ
+      GEN_IRQ : if ( NUM_IRQS_C > 8 ) generate
+         cpuIrqs(8) <= fpga_i(38);
+      end generate GEN_IRQ;
 
       B13_L15_N <= led( 0);
       B13_L15_P <= led( 1);
