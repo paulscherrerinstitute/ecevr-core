@@ -1240,9 +1240,9 @@ begin
       brd_gpio_o(1)  <= lan9254_gpo(2);
       brd_gpio_t(1)  <= lan9254_gpo(3);
 
-      lan9254_gpi(0) <= brd_gpio_i(0);
-      lan9254_gpi(1) <= brd_gpio_i(1);
-      lan9254_gpi(7 downto 2) <= lan9254_gpo(7 downto 2);
+      lan9254_gpi(0) <= brd_gpio_i(NUM_LAN_GPO_C + 0);
+      lan9254_gpi(1) <= brd_gpio_i(NUM_LAN_GPO_C + 1);
+      lan9254_gpi(7 downto 2) <= lan9254_gpo(NUM_LAN_GPO_C + 7 downto NUM_LAN_GPO_C + 2);
 
    end generate GEN_IOMAP_ECEVR;
 
