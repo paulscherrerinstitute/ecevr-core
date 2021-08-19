@@ -1031,11 +1031,42 @@ begin
 
    GEN_IOMAP_ECEVR : if ( ECEVR_C ) generate
 
-      signal fpga_i : std_logic_vector(43 downto 0);
-      signal fpga_o : std_logic_vector(43 downto 0) := (others => '0');
-      signal fpga_t : std_logic_vector(43 downto 0) := (others => '1');
+      -- board-level GPIO
+      constant NUM_BRD_GPIO_C : natural := 2;
+
+      constant NUM_LAN_GPIO_C : natural := 16;
+
+      constant NUM_LAN_GPI_C  : natural := 8;
+      constant NUM_LAN_GPO_C  : natural := 8;
+
+      type     IntArray      is array (integer range <>) of integer;
+
+      -- map GPIO numbers to index in 'fpga' array
+      constant lan9254_gpio_map : IntArray(NUM_LAN_GPIO_C - 1 downto 0) := (
+          0 => 35,  1 => 36,  2 => 37,  3 => 39,
+          4 => 18,  5 => 17,  6 => 16,  7 =>  9,
+          8 =>  8,  9 => 27, 10 => 23, 11 => 20,
+         12 => 21, 13 => 22, 14 => 24, 15 => 25
+      );
+
+      signal brd_gpio_i : std_logic_vector(NUM_BRD_GPIO_C - 1 downto 0);
+      signal brd_gpio_o : std_logic_vector(NUM_BRD_GPIO_C - 1 downto 0) := (others => '0');
+      signal brd_gpio_t : std_logic_vector(NUM_BRD_GPIO_C - 1 downto 0) := (others => '1');
+      signal brd_gpio_tb: std_logic_vector(NUM_BRD_GPIO_C - 1 downto 0) := (others => '0');
+
+      signal fpga_i     : std_logic_vector(43 downto 0);
+      signal fpga_o     : std_logic_vector(43 downto 0) := (others => '0');
+      signal fpga_t     : std_logic_vector(43 downto 0) := (others => '1');
+
+      -- assume EEPROM is configured for gpio(15 downto 0) -> inputs, gpio(7 downto 0) -> outputs
+      --               in/out from viewpoint of LAN9254...
+   
+      signal lan9254_gpi: std_logic_vector(NUM_LAN_GPIO_C - 1 downto NUM_LAN_GPO_C) := (others => '0');
+      signal lan9254_gpo: std_logic_vector(NUM_LAN_GPO_C  - 1 downto             0);
 
    begin
+
+      assert NUM_LAN_GPI_C + NUM_LAN_GPO_C = NUM_LAN_GPIO_C severity failure;
 
       ila1(43 downto 0) <= fpga_i;
 
@@ -1120,16 +1151,75 @@ begin
 
       end generate GEN_IOMAP_SPIBUF;
 
+      GEN_GPI_MAP : for i in lan9254_gpi'range generate
+         fpga_o(lan9254_gpio_map(i)) <= lan9254_gpi(i);
+         fpga_t(lan9254_gpio_map(i)) <= '0';
+      end generate GEN_GPI_MAP;
+
+      GEN_GPO_MAP : for i in lan9254_gpo'range generate
+         lan9254_gpo(i)              <= fpga_i(lan9254_gpio_map(i));
+      end generate GEN_GPO_MAP;
+
+      -- GPIO
+      U_GPIO_DAT_BUF : entity work.ZynqIOBuf
+         generic map (
+            W_G   => NUM_BRD_GPIO_C
+         )
+         port map (
+            io(0)  => B35_L10_P,
+            io(1)  => B35_L20_P,
+            i      => brd_gpio_o,
+            o      => brd_gpio_i,
+            t      => brd_gpio_t
+         );
+
+      brd_gpio_tb <= not brd_gpio_t;
+
+      U_GPIO_DIR_BUF : entity work.ZynqIOBuf
+         generic map (
+            W_G   => NUM_BRD_GPIO_C
+         )
+         port map (
+            io(0)  => B35_L20_N,
+            io(1)  => B35_L25,
+            i      => brd_gpio_tb,
+            o      => open,
+            t      => (others => '0')
+         );
+
+      U_LED_BUF      : entity work.ZynqIOBuf
+         generic map (
+            W_G   => led'length
+         )
+         port map (
+            io( 0) => B13_L15_N,
+            io( 1) => B13_L15_P,
+            io( 2) => B13_L20_P,
+            io( 3) => B13_L20_N,
+            io( 4) => B13_L21_P,
+            io( 5) => B13_L21_N,
+            io( 6) => B13_L18_N,
+            io( 7) => B13_L18_P,
+            io( 8) => B13_L3_P,
+            io( 9) => B13_L3_N,
+            io(10) => B13_L5_N,
+
+            i      => led,
+            o      => open,
+            t      => (others => '0')
+         );
+
       -- led(0..7) left -> right; 4 red; 4 grn
-      led(0)          <= fpga_i(35); -- gpio 0
-      led(1)          <= fpga_i(36); -- gpio 1
-      led(2)          <= fpga_i(37); -- gpio 2
-      led(3)          <= fpga_i(39); -- gpio 3
-      led(6 downto 4) <= (others => '0');
-      led(7)          <= not timingTxStat.resetDone;
-      led(8)          <= '0'; -- ylo led in PS-ethernet connector
-      led(9)          <= '0'; -- grn-cat/amb-ano in PS-ethernet conn.
-      led(10)         <= '0'; -- grn-ano/amb-cat in PS-ethernet conn.
+      GEN_LED_MAP : for i in lan9254_gpo'range generate
+         led(i)          <= lan9254_gpo(i);
+      end generate GEN_LED_MAP;
+
+      -- ylo led in PS-ethernet connector
+      led(8)          <= not timingTxStat.resetDone;
+      -- grn-cat/amb-ano in PS-ethernet conn.
+      led(9)          <= '0';
+      -- grn-ano/amb-cat in PS-ethernet conn.
+      led(10)         <= '0';
 
       -- RST#
       fpga_o(1) <= timingTxStat.resetDone;
@@ -1144,18 +1234,15 @@ begin
          cpuIrqs(8) <= fpga_i(38);
       end generate GEN_IRQ;
 
-      B13_L15_N <= led( 0);
-      B13_L15_P <= led( 1);
-      B13_L20_P <= led( 2);
-      B13_L20_N <= led( 3);
-      B13_L21_P <= led( 4);
-      B13_L21_N <= led( 5);
-      B13_L18_N <= led( 6);
-      B13_L18_P <= led( 7);
+      -- control board GPIO from ethercat
+      brd_gpio_o(0)  <= lan9254_gpo(0);
+      brd_gpio_t(0)  <= lan9254_gpo(1);
+      brd_gpio_o(1)  <= lan9254_gpo(2);
+      brd_gpio_t(1)  <= lan9254_gpo(3);
 
-      B13_L3_P  <= led( 8);
-      B13_L3_N  <= led( 9);
-      B13_L5_N  <= led(10);
+      lan9254_gpi(0) <= brd_gpio_i(0);
+      lan9254_gpi(1) <= brd_gpio_i(1);
+      lan9254_gpi(7 downto 2) <= lan9254_gpo(7 downto 2);
 
    end generate GEN_IOMAP_ECEVR;
 
