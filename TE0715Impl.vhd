@@ -95,6 +95,7 @@ architecture top_level of TE0715 is
    -- must match CONFIG.PCW_NUM_F2P_INTR_INPUTS {16} setting for IP generation
    constant NUM_IRQS_C  : natural          := 16;
    constant CLK_FREQ_C  : real             := 50.0E6;
+   constant CLK_PER_C   : real             := 1.0/CLK_FREQ_C;
 
    constant FEEDTHRU_C  : natural          := ite( CLK_FEEDTHRU_G, 1, 0 );
 
@@ -104,9 +105,9 @@ architecture top_level of TE0715 is
 
    constant ETH_MAC_C   : slv(47 downto 0) := x"aa0300564400";  -- 00:44:56:00:03:01 (ETH only)
 
-   constant NUM_AXI_SLV_C : natural        := 1;
+   constant NUM_AXI_SLV_C : natural        := 2;
 
-   constant NUM_SPI_C     : positive       := 1;
+   constant NUM_SPI_C     : positive       := 2;
 
 
    -- some differential outputs are swapped on PCB
@@ -317,6 +318,8 @@ architecture top_level of TE0715 is
 
    signal   spi_ss0_i       : slv(NUM_SPI_C - 1 downto 0) := (others => '1'); -- AR# 47511
 
+   signal   pl_spi_irq      : sl;
+
    signal   ila1            : slv(63 downto 0) := (others => '0');
 
    attribute IOB : string;
@@ -403,21 +406,50 @@ begin
          USB0_PORT_INDCTL              => open,
          USB0_VBUS_PWRFAULT            => '0',
          USB0_VBUS_PWRSELECT           => open,
-         SPI0_SCLK_I                   => spiIb(0).sclk,
-         SPI0_SCLK_O                   => spiOb(0).o.sclk,
-         SPI0_SCLK_T                   => spiOb(0).t.sclk,
-         SPI0_MOSI_I                   => spiIb(0).mosi,
-         SPI0_MOSI_O                   => spiOb(0).o.mosi,
-         SPI0_MOSI_T                   => spiOb(0).t.mosi,
-         SPI0_MISO_I                   => spiIb(0).miso,
-         SPI0_MISO_O                   => spiOb(0).o.miso,
-         SPI0_MISO_T                   => spiOb(0).t.miso,
-         SPI0_SS_I                     => spi_ss0_i(0),
-         SPI0_SS_O                     => spiOb(0).o_ss(0),
-         SPI0_SS1_O                    => spiOb(0).o_ss(1),
-         SPI0_SS2_O                    => spiOb(0).o_ss(2),
-         SPI0_SS_T                     => spiOb(0).t_ss0
+         SPI0_SCLK_I                   => spiIb(1).sclk,
+         SPI0_SCLK_O                   => spiOb(1).o.sclk,
+         SPI0_SCLK_T                   => spiOb(1).t.sclk,
+         SPI0_MOSI_I                   => spiIb(1).mosi,
+         SPI0_MOSI_O                   => spiOb(1).o.mosi,
+         SPI0_MOSI_T                   => spiOb(1).t.mosi,
+         SPI0_MISO_I                   => spiIb(1).miso,
+         SPI0_MISO_O                   => spiOb(1).o.miso,
+         SPI0_MISO_T                   => spiOb(1).t.miso,
+         SPI0_SS_I                     => spi_ss0_i(1),
+         SPI0_SS_O                     => spiOb(1).o_ss(0),
+         SPI0_SS1_O                    => spiOb(1).o_ss(1),
+         SPI0_SS2_O                    => spiOb(1).o_ss(2),
+         SPI0_SS_T                     => spiOb(1).t_ss0
       );
+
+   U_PL_SPI  : entity work.AxilSpiMaster
+      generic map (
+         AXIL_CLK_PERIOD_G => CLK_PER_C,
+         SPI_SCLK_PERIOD_G => 1.0E-6   -- 1 MHz
+      )
+      port map (
+         --Global Signals
+         axilClk         => sysClk,
+         axilRst         => sysRst,
+         -- Parallel interface
+         axilReadMaster  => axilReadMasters(1),
+         axilWriteMaster => axilWriteMasters(1),
+         axilReadSlave   => axilReadSlaves(1),
+         axilWriteSlave  => axilWriteSlaves(1),
+
+         --SPI interface
+         spiSs(0)        => spiOb(0).o_ss(1),
+         spiSclk         => spiOb(0).o.sclk,
+         spiMosi         => spiOb(0).o.mosi,
+         spiMiso         => spiIb(0).miso,
+
+         irq             => pl_spi_irq
+      );
+
+      spiOb(0).t.sclk <= '0';
+      spiOb(0).t.mosi <= '0';
+      spiOb(0).t.miso <= '1';
+      spiOb(0).o.miso <= '0';
 
    U_SPI_ILA : Ila_256
       port map (
@@ -1230,9 +1262,13 @@ begin
       fpga_t(19) <= '0';
 
       -- IRQ
-      GEN_IRQ : if ( NUM_IRQS_C > 8 ) generate
+      GEN_IRQ_8 : if ( NUM_IRQS_C > 8 ) generate
          cpuIrqs(8) <= fpga_i(38);
-      end generate GEN_IRQ;
+      end generate GEN_IRQ_8;
+
+      GEN_IRQ_9 : if ( NUM_IRQS_C > 9 ) generate
+         cpuIrqs(9) <= pl_spi_irq;
+      end generate GEN_IRQ_9;
 
       -- control board GPIO from ethercat
       brd_gpio_o(0)  <= lan9254_gpo(0);
