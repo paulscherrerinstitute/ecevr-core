@@ -24,6 +24,9 @@ entity AxilSpiMaster is
       spiMiso            : in  std_logic;
       spiSs              : out std_logic_vector(NUM_SPI_SS_G - 1 downto 0) := (others => '0');
 
+      ctl_o              : out Slv32Array(3 downto 0);
+      ctl_i              : in  Slv32Array(1 downto 0);
+
       irq                : out std_logic
    );
 end entity AxilSpiMaster;
@@ -48,6 +51,7 @@ architecture rtl of AxilSpiMaster is
       cmdReg            : std_logic_vector(15 downto 0);
       axilReadSlave     : AxiLiteReadSlaveType;
       axilWriteSlave    : AxiLiteWriteSlaveType;
+      ctl_o             : Slv32Array(3 downto 0);
    end record RegType;
 
    signal rin                     : RegType;
@@ -64,7 +68,8 @@ architecture rtl of AxilSpiMaster is
    constant REG_INIT_C : RegType := (
       cmdReg            => cmdRegInit('0'),
       axilReadSlave     => AXI_LITE_READ_SLAVE_INIT_C,
-      axilWriteSlave    => AXI_LITE_WRITE_SLAVE_INIT_C
+      axilWriteSlave    => AXI_LITE_WRITE_SLAVE_INIT_C,
+      ctl_o             => (others => (others => '1'))
    );
 
    signal r                       : RegType := REG_INIT_C;
@@ -79,7 +84,7 @@ begin
    spiWrData             <= r.cmdReg( 7 downto 0);
    spiRstLoc             <= r.cmdReg(13);
 
-   P_COMB : process(axilReadMaster, axilWriteMaster, axilRst, r, statusReg, cs, spiRstLoc) is
+   P_COMB : process(axilReadMaster, axilWriteMaster, axilRst, r, statusReg, cs, spiRstLoc, ctl_i) is
       variable v        : RegType;
       variable axilEp   : AxiLiteEndpointType;
    begin
@@ -92,6 +97,14 @@ begin
          v.cmdReg(15) := '0';
       end if;
       axiSlaveRegister ( axilEp, x"000", 16, v.cmdReg ); -- upper 16-bit read-write
+
+      axiSlaveRegister ( axilEp, x"010",  0, v.ctl_o(0));
+      axiSlaveRegister ( axilEp, x"014",  0, v.ctl_o(1));
+      axiSlaveRegister ( axilEp, x"018",  0, v.ctl_o(2));
+      axiSlaveRegister ( axilEp, x"01C",  0, v.ctl_o(3));
+
+      axiSlaveRegisterR( axilEp, x"020",  0, ctl_i(0));
+      axiSlaveRegisterR( axilEp, x"024",  0, ctl_i(1));
 
       axiSlaveDefault(axilEp, v.axilWriteSlave, v.axilReadSlave, AXI_RESP_DECERR_C);
 
@@ -147,5 +160,7 @@ begin
    axilWriteSlave <= r.axiLWriteSlave;
 
    spiSs          <= r.cmdReg( 8 + NUM_SPI_SS_G - 1 downto 8 );
+
+   ctl_o          <= r.ctl_o;
 
 end architecture rtl;
