@@ -50,6 +50,8 @@ use work.TimingConnectorPkg.all;
 use work.ZynqBspPkg.all;
 use work.Ila_256Pkg.all;
 
+use work.Lan9254Pkg.all;
+
 library unisim;
 use unisim.vcomponents.all;
 
@@ -86,11 +88,17 @@ architecture top_level of TE0715 is
    attribute IO_BUFFER_TYPE : string;
    attribute IOSTANDARD     : string;
    attribute SLEW           : string;
-   
-   attribute IO_BUFFER_TYPE of mgtTxP : signal is ite(IBERT_C, "OBUF", "NONE");
-   attribute IO_BUFFER_TYPE of mgtTxN : signal is ite(IBERT_C, "OBUF", "NONE");
-   attribute IO_BUFFER_TYPE of mgtRxP : signal is ite(IBERT_C, "IBUF", "NONE");
-   attribute IO_BUFFER_TYPE of mgtRxN : signal is ite(IBERT_C, "IBUF", "NONE");
+   attribute PULLUP         : string;
+   attribute PULLDOWN       : string;
+
+   -- pull-down the wait/ack into 'wait' state in case the EEPROM is not yet set up
+   -- correctly for using the push-pull driver with WAIT_ACK enabled (see Lan9254Hbi.vhd;
+   -- the datasheet incorrectly describes the lsbits in reg. 150).
+   attribute PULLDOWN       of B34_L15_N : signal is ite((PRJ_VARIANT_G = "ecevr-hbi16m"), "TRUE", "FALSE");
+   attribute IO_BUFFER_TYPE of mgtTxP    : signal is ite(IBERT_C, "OBUF", "NONE");
+   attribute IO_BUFFER_TYPE of mgtTxN    : signal is ite(IBERT_C, "OBUF", "NONE");
+   attribute IO_BUFFER_TYPE of mgtRxP    : signal is ite(IBERT_C, "IBUF", "NONE");
+   attribute IO_BUFFER_TYPE of mgtRxN    : signal is ite(IBERT_C, "IBUF", "NONE");
 
    -- must match CONFIG.PCW_NUM_F2P_INTR_INPUTS {16} setting for IP generation
    constant NUM_IRQS_C  : natural          := 16;
@@ -105,7 +113,7 @@ architecture top_level of TE0715 is
 
    constant ETH_MAC_C   : slv(47 downto 0) := x"aa0300564400";  -- 00:44:56:00:03:01 (ETH only)
 
-   constant NUM_AXI_SLV_C : natural        := 2;
+   constant NUM_AXI_SLV_C : natural        := 3;
 
    constant NUM_SPI_C     : positive       := 2;
 
@@ -156,7 +164,7 @@ architecture top_level of TE0715 is
    signal   sfp_tx_flt  : slv(NUM_SFPS_G - 1 downto 0);
    signal   sfp_los     : slv(NUM_SFPS_G - 1 downto 0);
    signal   sfp_presentb: slv(NUM_SFPS_G - 1 downto 0);
- 
+
    signal   psEthPhyLed0: sl;
    signal   si5344LOLb  : sl := '1';
    signal   si5344INTRb : sl := '1';
@@ -168,6 +176,9 @@ architecture top_level of TE0715 is
 
    signal   spiOb       : ZynqSpiOutArray(NUM_SPI_C - 1 downto 0);
    signal   spiIb       : ZynqSpiArray   (NUM_SPI_C - 1 downto 0);
+
+   signal   spiCtl_o    : Slv32Array(3 downto 0);
+   signal   spiCtl_i    : Slv32Array(1 downto 0) := (others => (others => '0'));
 
    signal   led         : slv(NUM_LED_C - 1 downto 0)   := ( others => '0' );
 
@@ -322,6 +333,9 @@ architecture top_level of TE0715 is
 
    signal   ila1            : slv(63 downto 0) := (others => '0');
 
+   signal   axilIlaSpare0   : slv(23 downto 0) := (others => '0');
+   signal   axilIlaSpare1   : slv(23 downto 0) := (others => '0');
+
    attribute IOB : string;
    attribute IOB of trigReg : signal is "TRUE";
    attribute IOB of recClk2 : signal is "TRUE";
@@ -332,7 +346,7 @@ architecture top_level of TE0715 is
 begin
 
    assert    PRJ_VARIANT_G = "tbox"      or PRJ_VARIANT_G = "ibert"     or PRJ_VARIANT_G = "devbd" or PRJ_VARIANT_G = "toggle"
-          or PRJ_VARIANT_G = "ecevr-spi" or PRJ_VARIANT_G = "ecevr-dio"
+          or PRJ_VARIANT_G = "ecevr-spi" or PRJ_VARIANT_G = "ecevr-dio" or PRJ_VARIANT_G = "ecevr-hbi16m"
    severity failure;
 
    sysRst <= not sysRstN;
@@ -425,7 +439,7 @@ begin
    U_PL_SPI  : entity work.AxilSpiMaster
       generic map (
          AXIL_CLK_PERIOD_G => CLK_PER_C,
-         SPI_SCLK_PERIOD_G => 1.0E-6   -- 1 MHz
+         SPI_SCLK_PERIOD_G => 5.0E-8   -- 1 MHz
       )
       port map (
          --Global Signals
@@ -442,6 +456,9 @@ begin
          spiSclk         => spiOb(0).o.sclk,
          spiMosi         => spiOb(0).o.mosi,
          spiMiso         => spiIb(0).miso,
+
+         ctl_o           => spiCtl_o,
+         ctl_i           => spiCtl_i,
 
          irq             => pl_spi_irq
       );
@@ -537,14 +554,16 @@ begin
 --          axiWriteSlave               => axiWriteSlave
 --      );
 
-   GEN_AXI_ILA : if ( false ) generate
+   GEN_AXI_ILA : if ( true  ) generate
    U_Ila_Axil : entity work.IlaAxiLite
       port map (
           axilClk                => sysClk,
           mAxilRead              => axilReadMaster,
           sAxilRead              => axilReadSlave,
           mAxilWrite             => axilWriteMaster,
-          sAxilWrite             => axilWriteSlave
+          sAxilWrite             => axilWriteSlave,
+          spare0                 => axilIlaSpare0,
+          spare1                 => axilIlaSpare1
       );
    end generate GEN_AXI_ILA;
 
@@ -867,7 +886,7 @@ begin
       P_COPY_CLOCKS : process ( outClk) is
       begin
          if ( rising_edge( outClk ) ) then
-            if ( outRst = '1' ) then 
+            if ( outRst = '1' ) then
                trigReg <= TIMING_TRIG_INVERT_C;
 	        else
                trigReg <= not trigReg;
@@ -968,7 +987,7 @@ begin
    end generate GEN_IBERT;
 
    -- common signals (on TE0715 module)
-   
+
    psEthPhyLed0 <= B34_L9_P;
 
    GEN_IOMAP_TBOX : if ( TBOX_C ) generate
@@ -1011,7 +1030,7 @@ begin
       led(0) <= rxLedState;
       -- led(0) <= sl(rxDiv(27));
       led(1) <= not timingRxStat.locked;
-   
+
       -- led(2) is the yellow lED in the ethernet connector
       led(2) <= rxDiv(27);
       -- led(3) and (4) are anti-parallel green/orange LEDs in the ethernet connector
@@ -1092,9 +1111,12 @@ begin
 
       -- assume EEPROM is configured for gpio(15 downto 0) -> inputs, gpio(7 downto 0) -> outputs
       --               in/out from viewpoint of LAN9254...
-   
+
       signal lan9254_gpi: std_logic_vector(NUM_LAN_GPIO_C - 1 downto NUM_LAN_GPO_C) := (others => '0');
       signal lan9254_gpo: std_logic_vector(NUM_LAN_GPO_C  - 1 downto             0);
+
+      signal lan9254_hbiOb : Lan9254HBIOutType := LAN9254HBIOUT_INIT_C;
+      signal lan9254_hbiIb : Lan9254HBIInpType := LAN9254HBIINP_INIT_C;
 
    begin
 
@@ -1183,14 +1205,119 @@ begin
 
       end generate GEN_IOMAP_SPIBUF;
 
-      GEN_GPI_MAP : for i in lan9254_gpi'range generate
-         fpga_o(lan9254_gpio_map(i)) <= lan9254_gpi(i);
-         fpga_t(lan9254_gpio_map(i)) <= '0';
-      end generate GEN_GPI_MAP;
+      GEN_IOMAP_HBI16_MUX : if ( PRJ_VARIANT_G = "ecevr-hbi16m" ) generate
 
-      GEN_GPO_MAP : for i in lan9254_gpo'range generate
-         lan9254_gpo(i)              <= fpga_i(lan9254_gpio_map(i));
-      end generate GEN_GPO_MAP;
+         lan9254_hbiIb.waitAck <= fpga_i( 0);
+
+         lan9254_hbiIb.ad(15) <= fpga_i(27);
+         lan9254_hbiIb.ad(14) <= fpga_i( 8);
+         lan9254_hbiIb.ad(13) <= fpga_i( 9);
+         lan9254_hbiIb.ad(12) <= fpga_i(16);
+         lan9254_hbiIb.ad(11) <= fpga_i(17);
+         lan9254_hbiIb.ad(10) <= fpga_i(18);
+         lan9254_hbiIb.ad( 9) <= fpga_i(15);
+         lan9254_hbiIb.ad( 8) <= fpga_i(37);
+         lan9254_hbiIb.ad( 7) <= fpga_i(36);
+         lan9254_hbiIb.ad( 6) <= fpga_i(35);
+         lan9254_hbiIb.ad( 5) <= fpga_i(40);
+         lan9254_hbiIb.ad( 4) <= fpga_i(39);
+         lan9254_hbiIb.ad( 3) <= fpga_i(34);
+         lan9254_hbiIb.ad( 2) <= fpga_i( 4);
+         lan9254_hbiIb.ad( 1) <= fpga_i( 5);
+         lan9254_hbiIb.ad( 0) <= fpga_i(10);
+
+         fpga_o(27)           <= lan9254_hbiOb.ad(15);
+         fpga_o( 8)           <= lan9254_hbiOb.ad(14);
+         fpga_o( 9)           <= lan9254_hbiOb.ad(13);
+         fpga_o(16)           <= lan9254_hbiOb.ad(12);
+         fpga_o(17)           <= lan9254_hbiOb.ad(11);
+         fpga_o(18)           <= lan9254_hbiOb.ad(10);
+         fpga_o(15)           <= lan9254_hbiOb.ad( 9);
+         fpga_o(37)           <= lan9254_hbiOb.ad( 8);
+         fpga_o(36)           <= lan9254_hbiOb.ad( 7);
+         fpga_o(35)           <= lan9254_hbiOb.ad( 6);
+         fpga_o(40)           <= lan9254_hbiOb.ad( 5);
+         fpga_o(39)           <= lan9254_hbiOb.ad( 4);
+         fpga_o(34)           <= lan9254_hbiOb.ad( 3);
+         fpga_o( 4)           <= lan9254_hbiOb.ad( 2);
+         fpga_o( 5)           <= lan9254_hbiOb.ad( 1);
+         fpga_o(10)           <= lan9254_hbiOb.ad( 0);
+
+         fpga_t(27)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t( 8)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t( 9)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t(16)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t(17)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t(18)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t(15)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t(37)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t(36)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t(35)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t(40)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t(39)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t(34)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t( 4)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t( 5)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t(10)           <= lan9254_hbiOb.ad_t( 0);
+
+         fpga_o(22)           <= lan9254_hbiOb.cs;
+         fpga_t(22)           <= '0';
+
+         fpga_o(41)           <= lan9254_hbiOb.be(1);
+         fpga_t(41)           <= '0';
+
+         fpga_o(33)           <= lan9254_hbiOb.be(0);
+         fpga_t(33)           <= '0';
+
+         fpga_o(25)           <= lan9254_hbiOb.rs;
+         fpga_t(25)           <= '0';
+
+         fpga_o(24)           <= lan9254_hbiOb.ws;
+         fpga_t(24)           <= '0';
+
+         fpga_o(19)           <= lan9254_hbiOb.ale(0);
+         fpga_t(19)           <= '0';
+
+         axilIlaSpare0(15 downto  0) <= lan9254_hbiOb.ad(15 downto 0);
+         axilIlaSpare0(17 downto 16) <= lan9254_hbiOb.ale;
+         axilIlaSpare0(19 downto 18) <= lan9254_hbiOb.be;
+         axilIlaSpare0(          20) <= lan9254_hbiOb.rs;
+         axilIlaSpare0(          21) <= lan9254_hbiOb.ws;
+         axilIlaSpare0(          22) <= lan9254_hbiOb.cs;
+         axilIlaSpare0(          23) <= lan9254_hbiOb.ad_t(0);
+
+         axilIlaSpare1(15 downto  0) <= lan9254_hbiIb.ad(15 downto 0);
+         axilIlaSpare1(          16) <= lan9254_hbiIb.waitAck;
+
+         U_HBI : entity work.AxilLan9254HbiMaster
+            generic map (
+               AXIL_CLK_PERIOD_G => CLK_PER_C
+            )
+            port map (
+               axilClk           => sysClk,
+               axilRst           => sysRst,
+
+               axilWriteMaster   => axilWriteMasters(2),
+               axilWriteSlave    => axilWriteSlaves (2),
+               axilReadMaster    => axilReadMasters (2),
+               axilReadSlave     => axilReadSlaves  (2),
+
+               hbiOut            => lan9254_hbiOb,
+               hbiInp            => lan9254_hbiIb
+            );
+
+      end generate GEN_IOMAP_HBI16_MUX;
+
+      GEN_GPIO_MAP : if ( PRJ_VARIANT_G = "ecevr-spi" or PRJ_VARIANT_G = "ecevr-dio" ) generate
+         GEN_GPI_MAP : for i in lan9254_gpi'range generate
+            fpga_o(lan9254_gpio_map(i)) <= lan9254_gpi(i);
+            fpga_t(lan9254_gpio_map(i)) <= '0';
+         end generate GEN_GPI_MAP;
+
+         GEN_GPO_MAP : for i in lan9254_gpo'range generate
+            lan9254_gpo(i)              <= fpga_i(lan9254_gpio_map(i));
+         end generate GEN_GPO_MAP;
+      end generate GEN_GPIO_MAP;
 
       -- GPIO
       U_GPIO_DAT_BUF : entity work.ZynqIOBuf
@@ -1257,9 +1384,15 @@ begin
       fpga_o(1) <= timingTxStat.resetDone;
       fpga_t(1) <= '0';
 
+      fpga_o(0) <= spiCtl_o(1)(0);
+      fpga_t(0) <= spiCtl_o(0)(0);
+      spiCtl_i(0)(0) <= fpga_i(0);
+
+      GEN_MAP_DIGIO : if ( PRJ_VARIANT_G = "ecevr-dio" ) generate
       -- OE_EXT
       fpga_o(19) <= '1';
       fpga_t(19) <= '0';
+      end generate GEN_MAP_DIGIO;
 
       -- IRQ
       GEN_IRQ_8 : if ( NUM_IRQS_C > 8 ) generate
