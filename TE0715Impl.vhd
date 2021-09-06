@@ -1118,11 +1118,18 @@ begin
       signal lan9254_hbiOb : Lan9254HBIOutType := LAN9254HBIOUT_INIT_C;
       signal lan9254_hbiIb : Lan9254HBIInpType := LAN9254HBIINP_INIT_C;
 
+      signal lan9254LocReg : std_logic_vector(31 downto 0) := (others => '0');
+
    begin
 
       assert NUM_LAN_GPI_C + NUM_LAN_GPO_C = NUM_LAN_GPIO_C severity failure;
 
       ila1(43 downto 0) <= fpga_i;
+
+      -- RST#
+      fpga_o(1) <= lan9254LocReg(0);
+      fpga_t(1) <= '0';
+
 
       GEN_IOBUF : ZynqIOBuf
          generic map (
@@ -1206,6 +1213,7 @@ begin
       end generate GEN_IOMAP_SPIBUF;
 
       GEN_IOMAP_HBI16_MUX : if ( PRJ_VARIANT_G = "ecevr-hbi16m" ) generate
+      begin
 
          lan9254_hbiIb.waitAck <= fpga_i( 0);
 
@@ -1303,7 +1311,9 @@ begin
                axilReadSlave     => axilReadSlaves  (2),
 
                hbiOut            => lan9254_hbiOb,
-               hbiInp            => lan9254_hbiIb
+               hbiInp            => lan9254_hbiIb,
+
+               locRegRW          => lan9254LocReg
             );
 
       end generate GEN_IOMAP_HBI16_MUX;
@@ -1317,6 +1327,11 @@ begin
          GEN_GPO_MAP : for i in lan9254_gpo'range generate
             lan9254_gpo(i)              <= fpga_i(lan9254_gpio_map(i));
          end generate GEN_GPO_MAP;
+
+
+         -- hack to drive RST#
+         lan9254LocReg(0) <= timingTxStat.resetDone;
+
       end generate GEN_GPIO_MAP;
 
       -- GPIO
@@ -1379,14 +1394,6 @@ begin
       led(9)          <= '0';
       -- grn-ano/amb-cat in PS-ethernet conn.
       led(10)         <= '0';
-
-      -- RST#
-      fpga_o(1) <= timingTxStat.resetDone;
-      fpga_t(1) <= '0';
-
-      fpga_o(0) <= spiCtl_o(1)(0);
-      fpga_t(0) <= spiCtl_o(0)(0);
-      spiCtl_i(0)(0) <= fpga_i(0);
 
       GEN_MAP_DIGIO : if ( PRJ_VARIANT_G = "ecevr-dio" ) generate
       -- OE_EXT
