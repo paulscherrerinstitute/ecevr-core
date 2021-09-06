@@ -9,7 +9,9 @@ use     work.Lan9254Pkg.all;
 entity AxilLan9254HbiMaster is
    generic (
       TPD_G              : time                 := 1 ns;
-      AXIL_CLK_PERIOD_G  : real
+      AXIL_CLK_PERIOD_G  : real;
+      LOC_REG_ADDR_G     : std_logic_vector(13 downto 0) := x"3000";
+      LOC_REG_INIT_G     : std_logic_vector(31 downto 0) := x"0000_0000"
    );
    port (
       axilClk            : in  std_logic;
@@ -20,7 +22,9 @@ entity AxilLan9254HbiMaster is
       axilWriteSlave     : out AxiLiteWriteSlaveType;
 
       hbiOut             : out Lan9254HBIOutType;
-      hbiInp             : in  Lan9254HBIInpType
+      hbiInp             : in  Lan9254HBIInpType;
+
+      locRegRW           : out std_logic_vector(31 downto 0)
    );
 end entity AxilLan9254HbiMaster;
 
@@ -92,6 +96,7 @@ architecture rtl of AxilLan9254HbiMaster is
       state             : StateType;
       axilReadSlave     : AxiLiteReadSlaveType;
       axilWriteSlave    : AxiLiteWriteSlaveType;
+      locReg3000        : std_logic_vector(31 downto 0);
    end record RegType;
 
    signal rin                     : RegType;
@@ -101,7 +106,8 @@ architecture rtl of AxilLan9254HbiMaster is
       accessWidth       => UNKNOWN,
       state             => AXIL,
       axilReadSlave     => AXI_LITE_READ_SLAVE_INIT_C,
-      axilWriteSlave    => AXI_LITE_WRITE_SLAVE_INIT_C
+      axilWriteSlave    => AXI_LITE_WRITE_SLAVE_INIT_C,
+      locReg3000        => LOC_REG_INIT_G
    );
 
    signal r                       : RegType := REG_INIT_C;
@@ -115,6 +121,7 @@ begin
       variable aSpc       : ASpaceType;
       variable extTxn     : std_logic;
       variable rdResp     : std_logic_vector(1 downto 0);
+      constant BE_DEASS_C : std_logic_vector(3 downto 0) := (others => not HBI_BE_ACT_C);
    begin
       v := r;
 
@@ -127,44 +134,58 @@ begin
             axiSlaveWaitTxn(axilWriteMaster, axilReadMaster, v.axilWriteSlave, v.axilReadSlave, axilStatus);
 
             if ( axilStatus.readEnable = '1' ) then
-               case aalignCheck( axilReadMaster.araddr ) is
-                  when MISALIGNED =>
-                        axiSlaveReadResponse( v.axilReadSlave, AXI_RESP_SLVERR_C );
-                  when OK =>
-                        v.hbiReq.addr        := axilReadMaster.araddr(v.hbiReq.addr'range);
-                        v.hbiReq.noAck       := axilReadMaster.araddr(16);
-                        -- for smaller alignments we use BE and align the address
-                        v.hbiReq.addr(1 downto 0) := (others => '0');
-                        v.hbiReq.be          := calcBE( axilReadMaster.araddr );
-                        v.hbiReq.rdnwr       := '1';
-                        v.hbiReq.valid       := '1';
-                        v.accessWidth        := space( axilReadMaster.araddr );
-                        -- block AXI response until read is back
-                        extTxn               := '1';
-                        v.state              := HBI;
-                  when others =>
-               end case;
+               if ( axilReadMaster.araddr(13 downto 2) = LOC_REG_ADDR_G(13 downto 2) ) then
+                  v.axilReadSlave.rdata := r.locReg3000;
+                  axiSlaveReadResponse( v.axilReadSlave );
+               else
+                  case aalignCheck( axilReadMaster.araddr ) is
+                     when MISALIGNED =>
+                           axiSlaveReadResponse( v.axilReadSlave, AXI_RESP_SLVERR_C );
+                     when OK =>
+                           v.hbiReq.addr        := axilReadMaster.araddr(v.hbiReq.addr'range);
+                           v.hbiReq.noAck       := axilReadMaster.araddr(16);
+                           -- for smaller alignments we use BE and align the address
+                           v.hbiReq.addr(1 downto 0) := (others => '0');
+                           v.hbiReq.be          := calcBE( axilReadMaster.araddr );
+                           v.hbiReq.rdnwr       := '1';
+                           v.hbiReq.valid       := '1';
+                           v.accessWidth        := space( axilReadMaster.araddr );
+                           -- block AXI response until read is back
+                           extTxn               := '1';
+                           v.state              := HBI;
+                     when others =>
+                  end case;
+               end if;
             end if;
 
             if ( axilStatus.writeEnable = '1' ) then
-               case aalignCheck( axilWriteMaster.awaddr ) is
-                  when MISALIGNED =>
-                        axiSlaveWriteResponse( v.axilWriteSlave, AXI_RESP_SLVERR_C );
-                  when OK =>
-                        v.hbiReq.addr        := axilWriteMaster.awaddr(v.hbiReq.addr'range);
-                        v.hbiReq.noAck       := axilWriteMaster.awaddr(16);
-                        -- for smaller alignments we use BE and align the address
-                        v.hbiReq.addr(1 downto 0) := (others => '0');
-                        v.hbiReq.wdata       := axilWriteMaster.wdata;
-                        v.hbiReq.be          := calcBE( axilWriteMaster.awaddr );
-                        v.hbiReq.rdnwr       := '0';
-                        v.hbiReq.valid       := '1';
-                        v.accessWidth        := space( axilWriteMaster.awaddr );
-                        -- posted write OK
-                        axiSlaveWriteResponse( v.axilWriteSlave );
-                        v.state              := HBI;
-                  when others =>
-               end case;
+               if ( axilWriteMaster.awaddr(13 downto 2) = LOC_REG_ADDR_G(13 downto 2) ) then
+                  for i in axilWriteMaster.wstrb'range loop
+                     if ( axilWriteMaster.wstrb(i) = '1' ) then
+                        v.locReg3000(8*i+7 downto 8*i) := axilWriteMaster.wdata(8*i+7 downto 8*i);
+                     end if;
+                  end loop;
+                  axiSlaveWriteResponse( v.axilWriteSlave );
+               else
+                  case aalignCheck( axilWriteMaster.awaddr ) is
+                     when MISALIGNED =>
+                           axiSlaveWriteResponse( v.axilWriteSlave, AXI_RESP_SLVERR_C );
+                     when OK =>
+                           v.hbiReq.addr        := axilWriteMaster.awaddr(v.hbiReq.addr'range);
+                           v.hbiReq.noAck       := axilWriteMaster.awaddr(16);
+                           -- for smaller alignments we use BE and align the address
+                           v.hbiReq.addr(1 downto 0) := (others => '0');
+                           v.hbiReq.wdata       := axilWriteMaster.wdata;
+                           v.hbiReq.be          := ( BE_DEASS_C xor axilWriteMaster.wstrb );
+                           v.hbiReq.rdnwr       := '0';
+                           v.hbiReq.valid       := '1';
+                           v.accessWidth        := space( axilWriteMaster.awaddr );
+                           -- posted write OK
+                           axiSlaveWriteResponse( v.axilWriteSlave );
+                           v.state              := HBI;
+                     when others =>
+                  end case;
+               end if;
             end if;
             axiSlaveDefault(axilWriteMaster, axilReadMaster, v.axilWriteSlave, v.axilReadSlave, axilStatus, AXI_RESP_DECERR_C, extTxn);
          when HBI =>
@@ -239,5 +260,7 @@ begin
 
    axilReadSlave  <= r.axiLReadSlave;
    axilWriteSlave <= r.axiLWriteSlave;
+
+   locRegRW       <= r.locReg3000;
 
 end architecture rtl;
