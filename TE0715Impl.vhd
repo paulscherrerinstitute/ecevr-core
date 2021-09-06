@@ -1127,7 +1127,7 @@ begin
       ila1(43 downto 0) <= fpga_i;
 
       -- RST#
-      fpga_o(1) <= lan9254LocReg(0);
+      fpga_o(1) <= not lan9254LocReg(0);
       fpga_t(1) <= '0';
 
 
@@ -1330,7 +1330,7 @@ begin
 
 
          -- hack to drive RST#
-         lan9254LocReg(0) <= timingTxStat.resetDone;
+         lan9254LocReg(0) <= not timingTxStat.resetDone;
 
       end generate GEN_GPIO_MAP;
 
