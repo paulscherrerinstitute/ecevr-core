@@ -10,7 +10,7 @@ entity AxilLan9254HbiMaster is
    generic (
       TPD_G              : time                 := 1 ns;
       AXIL_CLK_PERIOD_G  : real;
-      LOC_REG_ADDR_G     : std_logic_vector(13 downto 0) := x"3000";
+      LOC_REG_ADDR_G     : std_logic_vector(15 downto 0) := x"3000";
       LOC_REG_INIT_G     : std_logic_vector(31 downto 0) := x"0000_0000"
    );
    port (
