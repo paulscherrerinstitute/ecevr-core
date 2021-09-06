@@ -1316,6 +1316,10 @@ begin
                locRegRW          => lan9254LocReg
             );
 
+         GEN_LED_MAP : for i in 7 downto 0 generate
+            led(i) <= lan9254LocReg(8+i);
+         end generate GEN_LED_MAP;
+
       end generate GEN_IOMAP_HBI16_MUX;
 
       GEN_GPIO_MAP : if ( PRJ_VARIANT_G = "ecevr-spi" or PRJ_VARIANT_G = "ecevr-dio" ) generate
@@ -1330,7 +1334,22 @@ begin
 
 
          -- hack to drive RST#
-         lan9254LocReg(0) <= not timingTxStat.resetDone;
+         lan9254LocReg(0) <= timingTxStat.resetDone;
+
+         -- led(0..7) left -> right; 4 red; 4 grn
+         GEN_LED_MAP : for i in lan9254_gpo'range generate
+            led(i)          <= lan9254_gpo(i);
+         end generate GEN_LED_MAP;
+
+         -- control board GPIO from ethercat
+         brd_gpio_o(0)  <= lan9254_gpo(0);
+         brd_gpio_t(0)  <= lan9254_gpo(1);
+         brd_gpio_o(1)  <= lan9254_gpo(2);
+         brd_gpio_t(1)  <= lan9254_gpo(3);
+
+         lan9254_gpi(NUM_LAN_GPO_C + 0) <= brd_gpio_i(0);
+         lan9254_gpi(NUM_LAN_GPO_C + 1) <= brd_gpio_i(1);
+         lan9254_gpi(NUM_LAN_GPO_C + 7 downto NUM_LAN_GPO_C + 2) <= lan9254_gpo(7 downto 2);
 
       end generate GEN_GPIO_MAP;
 
@@ -1383,11 +1402,6 @@ begin
             t      => (others => '0')
          );
 
-      -- led(0..7) left -> right; 4 red; 4 grn
-      GEN_LED_MAP : for i in lan9254_gpo'range generate
-         led(i)          <= lan9254_gpo(i);
-      end generate GEN_LED_MAP;
-
       -- ylo led in PS-ethernet connector
       led(8)          <= not timingTxStat.resetDone;
       -- grn-cat/amb-ano in PS-ethernet conn.
@@ -1409,16 +1423,6 @@ begin
       GEN_IRQ_9 : if ( NUM_IRQS_C > 9 ) generate
          cpuIrqs(9) <= pl_spi_irq;
       end generate GEN_IRQ_9;
-
-      -- control board GPIO from ethercat
-      brd_gpio_o(0)  <= lan9254_gpo(0);
-      brd_gpio_t(0)  <= lan9254_gpo(1);
-      brd_gpio_o(1)  <= lan9254_gpo(2);
-      brd_gpio_t(1)  <= lan9254_gpo(3);
-
-      lan9254_gpi(NUM_LAN_GPO_C + 0) <= brd_gpio_i(0);
-      lan9254_gpi(NUM_LAN_GPO_C + 1) <= brd_gpio_i(1);
-      lan9254_gpi(NUM_LAN_GPO_C + 7 downto NUM_LAN_GPO_C + 2) <= lan9254_gpo(7 downto 2);
 
    end generate GEN_IOMAP_ECEVR;
 
