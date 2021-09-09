@@ -1090,6 +1090,9 @@ begin
       constant NUM_LAN_GPI_C  : natural := 8;
       constant NUM_LAN_GPO_C  : natural := 8;
 
+      constant LATCH0_MAP_C   : natural := ite( (PRJ_VARIANT_G = "ecevr-dio"), 0, 42 );
+      constant LATCH1_MAP_C   : natural := ite( (PRJ_VARIANT_G = "ecevr-dio"), 38, 43 );
+
       type     IntArray      is array (integer range <>) of integer;
 
       -- map GPIO numbers to index in 'fpga' array
@@ -1120,6 +1123,10 @@ begin
 
       signal lan9254LocReg : std_logic_vector(31 downto 0) := (others => '0');
 
+      signal ec_SYNC_i     : std_logic_vector( 1 downto 0);
+      signal ec_LATCH_o    : std_logic_vector( 1 downto 0) := (others => '0');
+      signal ec_LATCH_t    : std_logic_vector( 1 downto 0) := (others => '1');
+
    begin
 
       assert NUM_LAN_GPI_C + NUM_LAN_GPO_C = NUM_LAN_GPIO_C severity failure;
@@ -1127,9 +1134,18 @@ begin
       ila1(43 downto 0) <= fpga_i;
 
       -- RST#
-      fpga_o(1) <= not lan9254LocReg(0);
-      fpga_t(1) <= '0';
+      fpga_o(1)    <= not lan9254LocReg(0);
+      fpga_t(1)    <= '0';
 
+      -- SYNC
+      ec_SYNC_i(1) <= fpga_i(11);
+      ec_SYNC_i(0) <= fpga_i(29);
+
+      -- LATCH
+      fpga_o(LATCH1_MAP_C) <= ec_LATCH_o(1);
+      fpga_t(LATCH1_MAP_C) <= ec_LATCH_t(1);
+      fpga_o(LATCH0_MAP_C) <= ec_LATCH_o(0);
+      fpga_t(LATCH0_MAP_C) <= ec_LATCH_t(0);
 
       GEN_IOBUF : ZynqIOBuf
          generic map (
@@ -1416,7 +1432,7 @@ begin
       end generate GEN_MAP_DIGIO;
 
       -- IRQ
-      GEN_IRQ_8 : if ( NUM_IRQS_C > 8 ) generate
+      GEN_IRQ_8 : if ( (NUM_IRQS_C > 8) and  (PRJ_VARIANT_G /= "ecevr_dio") ) generate
          cpuIrqs(8) <= fpga_i(38);
       end generate GEN_IRQ_8;
 
