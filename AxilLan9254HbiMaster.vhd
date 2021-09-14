@@ -120,13 +120,14 @@ begin
 
       variable aSpc       : ASpaceType;
       variable extTxn     : std_logic;
-      variable rdResp     : std_logic_vector(1 downto 0);
+      variable axilResp   : std_logic_vector(1 downto 0);
       constant BE_DEASS_C : std_logic_vector(3 downto 0) := (others => not HBI_BE_ACT_C);
    begin
       v := r;
 
       axilStatus := AXI_LITE_STATUS_INIT_C;
       extTxn     := '0';
+      axilResp   := AXI_RESP_OK_C;
 
       case r.state is
          when AXIL =>
@@ -180,18 +181,23 @@ begin
                            v.hbiReq.rdnwr       := '0';
                            v.hbiReq.valid       := '1';
                            v.accessWidth        := space( axilWriteMaster.awaddr );
-                           -- posted write OK
-                           axiSlaveWriteResponse( v.axilWriteSlave );
+                           -- block AXI response until read is back
+                           -- NOTE: posted write NOT OK, since we have to wait until the posting is done!
+                           extTxn               := '1';
                            v.state              := HBI;
                      when others =>
                   end case;
                end if;
             end if;
             axiSlaveDefault(axilWriteMaster, axilReadMaster, v.axilWriteSlave, v.axilReadSlave, axilStatus, AXI_RESP_DECERR_C, extTxn);
+
          when HBI =>
             if ( hbiRep.valid = '1' ) then
                v.hbiReq.valid := '0';
                v.state        := AXIL;
+               if ( hbiRep.berr(0) = '1' ) then
+                  axilResp := AXI_RESP_SLVERR_C;
+               end if;
 
                if ( r.hbiReq.rdnwr = '1' ) then
 
@@ -217,12 +223,9 @@ begin
 --                  end case;
                   v.axilReadSlave.rdata := hbiRep.rdata;
 
-                  if ( hbiRep.berr(0) = '1' ) then
-                     rdResp := AXI_RESP_SLVERR_C;
-                  else
-                     rdResp := AXI_RESP_OK_C;
-                  end if;
-                  axiSlaveReadResponse( v.axilReadSlave, rdResp );
+                  axiSlaveReadResponse( v.axilReadSlave, axilResp );
+               else
+                  axiSlaveWriteResponse( v.axilWriteSlave, axilResp );
                end if;
             end if;
       end case;
