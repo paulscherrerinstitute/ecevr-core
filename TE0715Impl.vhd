@@ -1287,11 +1287,11 @@ begin
          fpga_o(22)           <= lan9254_hbiOb.cs;
          fpga_t(22)           <= '0';
 
-         fpga_o(41)           <= lan9254_hbiOb.be(1);
-         fpga_t(41)           <= '0';
+         fpga_o(21)           <= lan9254_hbiOb.be(1);
+         fpga_t(21)           <= '0';
 
-         fpga_o(33)           <= lan9254_hbiOb.be(0);
-         fpga_t(33)           <= '0';
+         fpga_o(20)           <= lan9254_hbiOb.be(0);
+         fpga_t(20)           <= '0';
 
          fpga_o(25)           <= lan9254_hbiOb.rs;
          fpga_t(25)           <= '0';
