@@ -1126,6 +1126,8 @@ begin
       signal lan9254_hbiOb : Lan9254HBIOutType := LAN9254HBIOUT_INIT_C;
       signal lan9254_hbiIb : Lan9254HBIInpType := LAN9254HBIINP_INIT_C;
 
+      signal lan9254_irq   : std_logic := '0';
+
       signal lan9254LocReg : std_logic_vector(31 downto 0) := (others => '0');
 
       signal ec_SYNC_i     : std_logic_vector( 1 downto 0);
@@ -1319,6 +1321,8 @@ begin
          axilIlaSpare1(          16) <= lan9254_hbiIb.waitAck;
 
          GEN_AXIL_HBI : if ( GEN_AXIL_HBI_C ) generate
+            signal lan9254LocRegR    : std_logic_vector(31 downto 0) := (others => '0');
+         begin
 
             U_HBI : entity work.AxilLan9254HbiMaster
                generic map (
@@ -1336,12 +1340,15 @@ begin
                   hbiOut            => lan9254_hbiOb,
                   hbiInp            => lan9254_hbiIb,
 
-                  locRegRW          => lan9254LocReg
+                  locRegRW          => lan9254LocReg,
+                  locRegR           => lan9254LocRegR
                );
 
             GEN_LED_MAP : for i in 7 downto 0 generate
                led(i) <= lan9254LocReg(8+i);
             end generate GEN_LED_MAP;
+
+            lan9254LocRegR(0) <= lan9254_irq;
 
          end generate GEN_AXIL_HBI;
 
@@ -1405,6 +1412,7 @@ begin
             lan9254LocReg(0)  <= locRegW(0)(0);
             escRst            <= locRegW(0)(4);
 
+            ctlState               <= axilIlaSpare2(4 downto 0);
             locRegR(0)(4 downto 0) <= ctlState;
 
             U_ESC : entity work.Lan9254ESC
@@ -1554,9 +1562,13 @@ begin
       fpga_t(19) <= '0';
       end generate GEN_MAP_DIGIO;
 
+      GEN_MAP_IRQ   : if ( PRJ_VARIANT_G /= "ecevr_dio" ) generate
+         lan9254_irq <= fpga_i(38);
+      end generate GEN_MAP_IRQ;
+
       -- IRQ
       GEN_IRQ_8 : if ( (NUM_IRQS_C > 8) and  (PRJ_VARIANT_G /= "ecevr_dio") ) generate
-         cpuIrqs(8) <= fpga_i(38);
+         cpuIrqs(8) <= lan9254_irq;
       end generate GEN_IRQ_8;
 
       GEN_IRQ_9 : if ( NUM_IRQS_C > 9 ) generate

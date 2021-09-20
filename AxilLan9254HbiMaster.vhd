@@ -24,7 +24,8 @@ entity AxilLan9254HbiMaster is
       hbiOut             : out Lan9254HBIOutType;
       hbiInp             : in  Lan9254HBIInpType;
 
-      locRegRW           : out std_logic_vector(31 downto 0)
+      locRegRW           : out std_logic_vector(31 downto 0);
+      locRegR            : in  std_logic_vector(31 downto 0) := (others => '0')
    );
 end entity AxilLan9254HbiMaster;
 
@@ -114,7 +115,7 @@ architecture rtl of AxilLan9254HbiMaster is
 
 begin
 
-   P_COMB : process(axilReadMaster, axilWriteMaster, axilRst, r, hbiRep, hbiInp) is
+   P_COMB : process(axilReadMaster, axilWriteMaster, axilRst, r, hbiRep, hbiInp, locRegR) is
       variable v          : RegType;
       variable axilStatus : AxiLiteStatusType;
 
@@ -137,6 +138,9 @@ begin
             if ( axilStatus.readEnable = '1' ) then
                if ( axilReadMaster.araddr(13 downto 2) = LOC_REG_ADDR_G(13 downto 2) ) then
                   v.axilReadSlave.rdata := r.locReg3000;
+                  axiSlaveReadResponse( v.axilReadSlave );
+               elsif ( axilReadMaster.araddr(13 downto 2) = LOC_REG_ADDR_G(13 downto 3) & "1" ) then
+                  v.axilReadSlave.rdata := locRegR;
                   axiSlaveReadResponse( v.axilReadSlave );
                else
                   case aalignCheck( axilReadMaster.araddr ) is
