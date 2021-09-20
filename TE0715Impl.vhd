@@ -1416,6 +1416,9 @@ begin
             locRegR(0)(4 downto 0) <= ctlState;
 
             U_ESC : entity work.Lan9254ESC
+               generic map (
+                  CLK_FREQ_G   => CLK_FREQ_C
+               )
                port map (
                   clk          => sysClk,
                   rst          => escRst,
