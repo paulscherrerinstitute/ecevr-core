@@ -1431,6 +1431,9 @@ begin
 
                   rxPDOMst     => rxPDOMst,
                   rxPDORdy     => rxPDORdy,
+
+                  irq          => lan9254_irq,
+
                   testFailed   => locRegR(0)(12 downto 8)
                );
 
@@ -1563,7 +1566,16 @@ begin
       end generate GEN_MAP_DIGIO;
 
       GEN_MAP_IRQ   : if ( PRJ_VARIANT_G /= "ecevr_dio" ) generate
-         lan9254_irq <= fpga_i(38);
+         U_SYNC_IRQ : entity work.SynchronizerBit
+            generic map (
+               RSTPOL_G   => not EC_IRQ_ACT_C
+            )
+            port map (
+               clk        => sysClk,
+               rst        => escRst,
+               datInp(0)  => fpga_i(38),
+               datOut(0)  => lan9254_irq
+            )
       end generate GEN_MAP_IRQ;
 
       -- IRQ
