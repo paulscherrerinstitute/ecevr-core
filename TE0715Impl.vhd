@@ -66,7 +66,7 @@ architecture top_level of TE0715 is
    constant  TIMING_PLL_C     : natural range 0 to 1 := 1;
    constant  TIMING_PLL_SEL_C : slv(1 downto 0) := ite( TIMING_PLL_C = 0, "00", "11" );
 
-   constant  GEN_AXIL_HBI_C   : boolean := false;
+   constant  GEN_AXIL_HBI_C   : boolean := true;
 
    function  isArtix(part : string := PRJ_PART_G) return boolean is
       variable prefix: string(0 to 6);
