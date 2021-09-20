@@ -51,6 +51,7 @@ use work.ZynqBspPkg.all;
 use work.Ila_256Pkg.all;
 
 use work.Lan9254Pkg.all;
+use work.Lan9254ESCPkg.all;
 
 library unisim;
 use unisim.vcomponents.all;
@@ -64,6 +65,8 @@ architecture top_level of TE0715 is
 
    constant  TIMING_PLL_C     : natural range 0 to 1 := 1;
    constant  TIMING_PLL_SEL_C : slv(1 downto 0) := ite( TIMING_PLL_C = 0, "00", "11" );
+
+   constant  GEN_AXIL_HBI_C   : boolean := false;
 
    function  isArtix(part : string := PRJ_PART_G) return boolean is
       variable prefix: string(0 to 6);
@@ -335,6 +338,7 @@ architecture top_level of TE0715 is
 
    signal   axilIlaSpare0   : slv(23 downto 0) := (others => '0');
    signal   axilIlaSpare1   : slv(23 downto 0) := (others => '0');
+   signal   axilIlaSpare2   : slv(23 downto 0) := (others => '0');
 
    attribute IOB : string;
    attribute IOB of trigReg : signal is "TRUE";
@@ -563,7 +567,8 @@ begin
           mAxilWrite             => axilWriteMaster,
           sAxilWrite             => axilWriteSlave,
           spare0                 => axilIlaSpare0,
-          spare1                 => axilIlaSpare1
+          spare1                 => axilIlaSpare1,
+          spare2                 => axilIlaSpare2
       );
    end generate GEN_AXI_ILA;
 
@@ -1313,28 +1318,146 @@ begin
          axilIlaSpare1(15 downto  0) <= lan9254_hbiIb.ad(15 downto 0);
          axilIlaSpare1(          16) <= lan9254_hbiIb.waitAck;
 
-         U_HBI : entity work.AxilLan9254HbiMaster
-            generic map (
-               AXIL_CLK_PERIOD_G => CLK_PER_C
-            )
-            port map (
-               axilClk           => sysClk,
-               axilRst           => sysRst,
+         GEN_AXIL_HBI : if ( GEN_AXIL_HBI_C ) generate
 
-               axilWriteMaster   => axilWriteMasters(2),
-               axilWriteSlave    => axilWriteSlaves (2),
-               axilReadMaster    => axilReadMasters (2),
-               axilReadSlave     => axilReadSlaves  (2),
+            U_HBI : entity work.AxilLan9254HbiMaster
+               generic map (
+                  AXIL_CLK_PERIOD_G => CLK_PER_C
+               )
+               port map (
+                  axilClk           => sysClk,
+                  axilRst           => sysRst,
 
-               hbiOut            => lan9254_hbiOb,
-               hbiInp            => lan9254_hbiIb,
+                  axilWriteMaster   => axilWriteMasters(2),
+                  axilWriteSlave    => axilWriteSlaves (2),
+                  axilReadMaster    => axilReadMasters (2),
+                  axilReadSlave     => axilReadSlaves  (2),
 
-               locRegRW          => lan9254LocReg
-            );
+                  hbiOut            => lan9254_hbiOb,
+                  hbiInp            => lan9254_hbiIb,
 
-         GEN_LED_MAP : for i in 7 downto 0 generate
-            led(i) <= lan9254LocReg(8+i);
-         end generate GEN_LED_MAP;
+                  locRegRW          => lan9254LocReg
+               );
+
+            GEN_LED_MAP : for i in 7 downto 0 generate
+               led(i) <= lan9254LocReg(8+i);
+            end generate GEN_LED_MAP;
+
+         end generate GEN_AXIL_HBI;
+
+         GEN_ESC : if ( not GEN_AXIL_HBI_C ) generate
+
+            constant N_L_R_REGS_C : natural := 1;
+            constant N_L_W_REGS_C : natural := 1;
+
+            signal busReq         : Lan9254ReqType;
+            signal busRep         : Lan9254RepType;
+
+            signal txPDOMst       : Lan9254PDOMstType := LAN9254PDO_MST_INIT_C;
+            signal txPDORdy       : std_logic;
+
+            signal rxPDOMst       : Lan9254PDOMstType;
+            signal rxPDORdy       : std_logic := '1';
+
+            signal escState       : ESCStateType;
+
+            signal ctlState       : std_logic_vector(4 downto 0);
+
+
+            signal locRegR        : Slv32Array(N_L_R_REGS_C - 1 downto 0) := (others => (others => '0'));
+            signal locRegW        : Slv32Array(N_L_W_REGS_C - 1 downto 0) := (others => (others => '0'));
+
+            signal escRst         : std_logic;
+
+
+         begin
+            U_HBI : entity work.Lan9254HBI
+               generic map (
+                  CLOCK_FREQ_G => CLK_FREQ_C
+               )
+               port map (
+                  clk          => sysClk,
+                  rst          => escRst,
+
+                  req          => busReq,
+                  rep          => busRep,
+
+                  hbiOut       => lan9254_hbiOb,
+                  hbiInp       => lan9254_hbiIb
+               );
+
+            U_REG : entity work.AxiLiteRegs
+               generic map (
+                  NUM_WRITE_REG_G => N_L_W_REGS_C,
+                  NUM_READ_REG_G  => N_L_R_REGS_C
+               )
+               port map (
+                  axiClk          => sysClk,
+                  axiClkRst       => sysRst,
+                  axiWriteMaster  => axilWriteMasters(2),
+                  axiWriteSlave   => axilWriteSlaves (2),
+                  axiReadMaster   => axilReadMasters (2),
+                  axiReadSlave    => axilReadSlaves  (2),
+                  writeRegister   => locRegW,
+                  readRegister    => locRegR
+               );
+
+            lan9254LocReg(0)  <= locRegW(0)(0);
+            escRst            <= locRegW(0)(4);
+
+            locRegR(0)(4 downto 0) <= ctlState;
+
+            U_ESC : entity work.Lan9254ESC
+               port map (
+                  clk          => sysClk,
+                  rst          => escRst,
+
+                  escState     => escState,
+                  debug        => axilIlaSpare2,
+
+                  req          => busReq,
+                  rep          => busRep,
+
+                  txPDOMst     => txPDOMst,
+                  txPDORdy     => txPDORdy,
+
+                  rxPDOMst     => rxPDOMst,
+                  rxPDORdy     => rxPDORdy,
+                  testFailed   => locRegR(0)(12 downto 8)
+               );
+
+            txPDOMst.valid   <= '1';
+
+            P_TXPDO : process ( sysClk ) is
+            begin
+               if ( rising_edge(sysClk ) ) then
+                  txPDOMst.ben  <= "11";
+                  txPDOMst.data <= x"CAFE";
+                  if ( txPDORdy = '1' ) then
+                     if ( SM3_WADDR_END_C = txPDOMst.wrdAddr ) then
+                        txPDOMst.wrdAddr <= (others => '0');
+                        if ( ESC_SM3_LEN_C(0) = '1' ) then
+                           txPDOMst.ben(1) <= '0';
+                        end if;
+                     else
+                        txPDOMst.wrdAddr <= txPDOMst.wrdAddr + 1;
+                     end if;
+                  end if;
+               end if;
+            end process P_TXPDO;
+
+            rxPDORdy         <= '1';
+
+            P_LED : process ( sysClk ) is
+            begin
+               if ( rising_edge( sysClk ) ) then
+                  if ( rxPDOMst.valid = '1' and to_integer( rxPDOMst.wrdAddr ) = 0 and rxPDOMst.ben(0) = '1' ) then
+                     led(7 downto 0) <= rxPDOMst.data(7 downto 0);
+                  end if;
+               end if;
+            end process P_LED;
+
+         end generate GEN_ESC;
 
       end generate GEN_IOMAP_HBI16_MUX;
 
