@@ -1129,6 +1129,7 @@ begin
       signal lan9254_irq   : std_logic := '0';
 
       signal lan9254LocReg : std_logic_vector(31 downto 0) := (others => '0');
+      signal lan9254LocRegR: std_logic_vector(31 downto 0) := (others => '0');
 
       signal ec_SYNC_i     : std_logic_vector( 1 downto 0);
       signal ec_LATCH_o    : std_logic_vector( 1 downto 0) := (others => '0');
@@ -1150,10 +1151,14 @@ begin
       spiSel       <= lan9254LocReg(1);
       escRst       <= lan9254LocReg(4);
 
+      lan9254LocRegR(0) <= lan9254_irq;
+
 
       -- SYNC
       ec_SYNC_i(1) <= fpga_i(11);
+      fpga_t(11)   <= '1';
       ec_SYNC_i(0) <= fpga_i(29);
+      fpga_t(29)   <= '1';
 
       -- LATCH
       fpga_o(LATCH1_MAP_C) <= ec_LATCH_o(1);
@@ -1305,6 +1310,7 @@ begin
          end process P_SPI_MUX;
 
          lan9254_hbiIb.waitAck <= fpga_i( 0);
+         fpga_t(0)             <= '1';
 
          lan9254_hbiIb.ad(15) <= fpga_i(27);
          lan9254_hbiIb.ad(14) <= fpga_i( 8);
@@ -1387,7 +1393,6 @@ begin
          axilIlaSpare1(          16) <= lan9254_hbiIb.waitAck;
 
          GEN_AXIL_HBI : if ( GEN_AXIL_HBI_C ) generate
-            signal lan9254LocRegR    : std_logic_vector(31 downto 0) := (others => '0');
          begin
 
             U_HBI : entity work.AxilLan9254HbiMaster
@@ -1413,8 +1418,6 @@ begin
             GEN_LED_MAP : for i in 7 downto 0 generate
                led(i) <= lan9254LocReg(8+i);
             end generate GEN_LED_MAP;
-
-            lan9254LocRegR(0) <= lan9254_irq;
 
          end generate GEN_AXIL_HBI;
 
@@ -1473,9 +1476,10 @@ begin
                );
 
             lan9254LocReg     <= locRegW(0);
+            locRegR(0)        <= lan9254LocRegR;
 
-            ctlState               <= axilIlaSpare2(4 downto 0);
-            locRegR(0)(4 downto 0) <= ctlState;
+            ctlState                    <= axilIlaSpare2(4 downto 0);
+            lan9254LocRegR(12 downto 8) <= ctlState;
 
             U_ESC : entity work.Lan9254ESC
                generic map (
@@ -1545,6 +1549,7 @@ begin
 
          GEN_GPO_MAP : for i in lan9254_gpo'range generate
             lan9254_gpo(i)              <= fpga_i(lan9254_gpio_map(i));
+            fpga_t(lan9254_gpio_map(i)) <= '1';
          end generate GEN_GPO_MAP;
 
 
@@ -1631,6 +1636,7 @@ begin
       end generate GEN_MAP_DIGIO;
 
       GEN_MAP_IRQ   : if ( PRJ_VARIANT_G /= "ecevr_dio" ) generate
+
          U_SYNC_IRQ : entity work.SynchronizerBit
             generic map (
                RSTPOL_G   => not EC_IRQ_ACT_C
@@ -1641,6 +1647,9 @@ begin
                datInp(0)  => fpga_i(38),
                datOut(0)  => lan9254_irq
             );
+
+         fpga_t(38) <= '1';
+
       end generate GEN_MAP_IRQ;
 
       -- IRQ
