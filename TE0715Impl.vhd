@@ -66,7 +66,7 @@ architecture top_level of TE0715 is
    constant  TIMING_PLL_C     : natural range 0 to 1 := 1;
    constant  TIMING_PLL_SEL_C : slv(1 downto 0) := ite( TIMING_PLL_C = 0, "00", "11" );
 
-   constant  GEN_AXIL_HBI_C   : boolean := true;
+   constant  GEN_AXIL_HBI_C   : boolean := false;
 
    function  isArtix(part : string := PRJ_PART_G) return boolean is
       variable prefix: string(0 to 6);
@@ -1134,15 +1134,22 @@ begin
       signal ec_LATCH_o    : std_logic_vector( 1 downto 0) := (others => '0');
       signal ec_LATCH_t    : std_logic_vector( 1 downto 0) := (others => '1');
 
+      signal spiSel        : std_logic := '0';
+      signal escRst        : std_logic := '0';
+
    begin
 
       assert NUM_LAN_GPI_C + NUM_LAN_GPO_C = NUM_LAN_GPIO_C severity failure;
 
       ila1(43 downto 0) <= fpga_i;
 
-      -- RST#
+      -- RST# and other locReg mappings
       fpga_o(1)    <= not lan9254LocReg(0);
       fpga_t(1)    <= '0';
+
+      spiSel       <= lan9254LocReg(1);
+      escRst       <= lan9254LocReg(4);
+
 
       -- SYNC
       ec_SYNC_i(1) <= fpga_i(11);
@@ -1236,7 +1243,62 @@ begin
       end generate GEN_IOMAP_SPIBUF;
 
       GEN_IOMAP_HBI16_MUX : if ( PRJ_VARIANT_G = "ecevr-hbi16m" ) generate
+         signal fpga_o_05 : std_logic;
+         signal fpga_o_10 : std_logic;
+         signal fpga_o_15 : std_logic;
+         signal fpga_o_40 : std_logic;
+         signal fpga_t_05 : std_logic;
+         signal fpga_t_10 : std_logic;
+         signal fpga_t_15 : std_logic;
+         signal fpga_t_40 : std_logic;
+         signal fpga_i_05 : std_logic;
+         signal fpga_i_10 : std_logic;
+         signal fpga_i_15 : std_logic;
+         signal fpga_i_40 : std_logic;
       begin
+
+         P_SPI_MUX : process (spiSel) is
+         begin
+            if ( spiSel = '1' ) then
+               fpga_o(10)    <= spiOb(0).o.mosi;
+               fpga_t(10)    <= spiOb(0).t.mosi;
+               spiIb(0).mosi <= fpga_i(10);
+               fpga_i_10     <= '0';
+
+               fpga_o(15)    <= spiOb(0).o.sclk;
+               fpga_t(15)    <= spiOb(0).t.sclk;
+               spiIb(0).sclk <= fpga_i(15);
+               fpga_i_15     <= '0';
+
+               fpga_o( 5)    <= spiOb(0).o.miso;
+               fpga_t( 5)    <= spiOb(0).t.miso;
+               spiIb(0).miso <= fpga_i( 5);
+               fpga_i_05     <= '0';
+
+               fpga_o(40)    <= spiOb(0).o_ss(1);
+               fpga_t(40)    <= '0';
+               fpga_i_40     <= '0';
+            else
+               fpga_o(10)    <= fpga_o_10;
+               fpga_t(10)    <= fpga_t_10;
+               spiIb(0).mosi <= '1';
+               fpga_i_10     <= fpga_i(10);
+
+               fpga_o(15)    <= fpga_o_15;
+               fpga_t(15)    <= fpga_t_15;
+               spiIb(0).sclk <= '1';
+               fpga_i_15     <= fpga_i(15);
+
+               fpga_o( 5)    <= fpga_o_05;
+               fpga_t( 5)    <= fpga_t_05;
+               spiIb(0).miso <= '1';
+               fpga_i_05     <= fpga_i( 5);
+
+               fpga_o(40)    <= fpga_o_40;
+               fpga_t(40)    <= fpga_t_40;
+               fpga_i_40     <= fpga_i(40);
+            end if;
+         end process P_SPI_MUX;
 
          lan9254_hbiIb.waitAck <= fpga_i( 0);
 
@@ -1246,16 +1308,16 @@ begin
          lan9254_hbiIb.ad(12) <= fpga_i(16);
          lan9254_hbiIb.ad(11) <= fpga_i(17);
          lan9254_hbiIb.ad(10) <= fpga_i(18);
-         lan9254_hbiIb.ad( 9) <= fpga_i(15);
+         lan9254_hbiIb.ad( 9) <= fpga_i_15;
          lan9254_hbiIb.ad( 8) <= fpga_i(37);
          lan9254_hbiIb.ad( 7) <= fpga_i(36);
          lan9254_hbiIb.ad( 6) <= fpga_i(35);
-         lan9254_hbiIb.ad( 5) <= fpga_i(40);
+         lan9254_hbiIb.ad( 5) <= fpga_i_40;
          lan9254_hbiIb.ad( 4) <= fpga_i(39);
          lan9254_hbiIb.ad( 3) <= fpga_i(34);
          lan9254_hbiIb.ad( 2) <= fpga_i( 4);
-         lan9254_hbiIb.ad( 1) <= fpga_i( 5);
-         lan9254_hbiIb.ad( 0) <= fpga_i(10);
+         lan9254_hbiIb.ad( 1) <= fpga_i_05;
+         lan9254_hbiIb.ad( 0) <= fpga_i_10;
 
          fpga_o(27)           <= lan9254_hbiOb.ad(15);
          fpga_o( 8)           <= lan9254_hbiOb.ad(14);
@@ -1263,16 +1325,16 @@ begin
          fpga_o(16)           <= lan9254_hbiOb.ad(12);
          fpga_o(17)           <= lan9254_hbiOb.ad(11);
          fpga_o(18)           <= lan9254_hbiOb.ad(10);
-         fpga_o(15)           <= lan9254_hbiOb.ad( 9);
+         fpga_o_15            <= lan9254_hbiOb.ad( 9);
          fpga_o(37)           <= lan9254_hbiOb.ad( 8);
          fpga_o(36)           <= lan9254_hbiOb.ad( 7);
          fpga_o(35)           <= lan9254_hbiOb.ad( 6);
-         fpga_o(40)           <= lan9254_hbiOb.ad( 5);
+         fpga_o_40            <= lan9254_hbiOb.ad( 5);
          fpga_o(39)           <= lan9254_hbiOb.ad( 4);
          fpga_o(34)           <= lan9254_hbiOb.ad( 3);
          fpga_o( 4)           <= lan9254_hbiOb.ad( 2);
-         fpga_o( 5)           <= lan9254_hbiOb.ad( 1);
-         fpga_o(10)           <= lan9254_hbiOb.ad( 0);
+         fpga_o_05            <= lan9254_hbiOb.ad( 1);
+         fpga_o_10            <= lan9254_hbiOb.ad( 0);
 
          fpga_t(27)           <= lan9254_hbiOb.ad_t( 0);
          fpga_t( 8)           <= lan9254_hbiOb.ad_t( 0);
@@ -1280,16 +1342,16 @@ begin
          fpga_t(16)           <= lan9254_hbiOb.ad_t( 0);
          fpga_t(17)           <= lan9254_hbiOb.ad_t( 0);
          fpga_t(18)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t(15)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t_15            <= lan9254_hbiOb.ad_t( 0);
          fpga_t(37)           <= lan9254_hbiOb.ad_t( 0);
          fpga_t(36)           <= lan9254_hbiOb.ad_t( 0);
          fpga_t(35)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t(40)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t_40            <= lan9254_hbiOb.ad_t( 0);
          fpga_t(39)           <= lan9254_hbiOb.ad_t( 0);
          fpga_t(34)           <= lan9254_hbiOb.ad_t( 0);
          fpga_t( 4)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t( 5)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t(10)           <= lan9254_hbiOb.ad_t( 0);
+         fpga_t_05            <= lan9254_hbiOb.ad_t( 0);
+         fpga_t_10            <= lan9254_hbiOb.ad_t( 0);
 
          fpga_o(22)           <= lan9254_hbiOb.cs;
          fpga_t(22)           <= '0';
@@ -1374,9 +1436,6 @@ begin
             signal locRegR        : Slv32Array(N_L_R_REGS_C - 1 downto 0) := (others => (others => '0'));
             signal locRegW        : Slv32Array(N_L_W_REGS_C - 1 downto 0) := (others => (others => '0'));
 
-            signal escRst         : std_logic;
-
-
          begin
             U_HBI : entity work.Lan9254HBI
                generic map (
@@ -1409,8 +1468,7 @@ begin
                   readRegister    => locRegR
                );
 
-            lan9254LocReg(0)  <= locRegW(0)(0);
-            escRst            <= locRegW(0)(4);
+            lan9254LocReg     <= locRegW(0);
 
             ctlState               <= axilIlaSpare2(4 downto 0);
             locRegR(0)(4 downto 0) <= ctlState;
