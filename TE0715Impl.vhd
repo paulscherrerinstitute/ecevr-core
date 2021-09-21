@@ -1257,7 +1257,11 @@ begin
          signal fpga_i_40 : std_logic;
       begin
 
-         P_SPI_MUX : process (spiSel) is
+         P_SPI_MUX : process (
+            spiSel, spiOb, fpga_i,
+            fpga_o_05, fpga_t_05, fpga_o_10, fpga_t_10,
+            fpga_o_15, fpga_t_15, fpga_o_40, fpga_t_40
+         ) is
          begin
             if ( spiSel = '1' ) then
                fpga_o(10)    <= spiOb(0).o.mosi;
