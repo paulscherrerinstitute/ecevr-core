@@ -1636,7 +1636,7 @@ begin
                rst        => escRst,
                datInp(0)  => fpga_i(38),
                datOut(0)  => lan9254_irq
-            )
+            );
       end generate GEN_MAP_IRQ;
 
       -- IRQ
