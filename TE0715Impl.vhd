@@ -1280,13 +1280,16 @@ begin
          signal escState       : ESCStateType;
          signal ctlState       : std_logic_vector(4 downto 0);
 
+         signal hbi_ad_t       : std_logic := '1';
+         signal hbi_ob_t       : std_logic := '1';
 
       begin
 
          P_SPI_MUX : process (
             spiSel, axiSel, spiOb, fpga_i,
             fpga_o_05, fpga_t_05, fpga_o_10, fpga_t_10,
-            fpga_o_15, fpga_t_15, fpga_o_40, fpga_t_40
+            fpga_o_15, fpga_t_15, fpga_o_40, fpga_t_40,
+            lan9254_hbiOb
          ) is
          begin
             if ( ( spiSel = '1' ) and ( axiSel = '0' ) ) then
@@ -1308,6 +1311,9 @@ begin
                fpga_o(40)    <= spiOb(0).o_ss(1);
                fpga_t(40)    <= '0';
                fpga_i_40     <= '0';
+
+               hbi_ad_t      <= '1';
+               hbi_ob_t      <= '1';
             else
                fpga_o(10)    <= fpga_o_10;
                fpga_t(10)    <= fpga_t_10;
@@ -1327,6 +1333,9 @@ begin
                fpga_o(40)    <= fpga_o_40;
                fpga_t(40)    <= fpga_t_40;
                fpga_i_40     <= fpga_i(40);
+
+               hbi_ad_t      <= lan9254_hbiOb.ad_t( 0);
+               hbi_ob_t      <= '0';
             end if;
          end process P_SPI_MUX;
 
@@ -1381,40 +1390,40 @@ begin
          fpga_o_05            <= lan9254_hbiOb.ad( 1);
          fpga_o_10            <= lan9254_hbiOb.ad( 0);
 
-         fpga_t(27)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t( 8)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t( 9)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t(16)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t(17)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t(18)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t_15            <= lan9254_hbiOb.ad_t( 0);
-         fpga_t(37)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t(36)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t(35)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t_40            <= lan9254_hbiOb.ad_t( 0);
-         fpga_t(39)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t(34)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t( 4)           <= lan9254_hbiOb.ad_t( 0);
-         fpga_t_05            <= lan9254_hbiOb.ad_t( 0);
-         fpga_t_10            <= lan9254_hbiOb.ad_t( 0);
+         fpga_t(27)           <= hbi_ad_t;
+         fpga_t( 8)           <= hbi_ad_t;
+         fpga_t( 9)           <= hbi_ad_t;
+         fpga_t(16)           <= hbi_ad_t;
+         fpga_t(17)           <= hbi_ad_t;
+         fpga_t(18)           <= hbi_ad_t;
+         fpga_t_15            <= hbi_ad_t;
+         fpga_t(37)           <= hbi_ad_t;
+         fpga_t(36)           <= hbi_ad_t;
+         fpga_t(35)           <= hbi_ad_t;
+         fpga_t_40            <= hbi_ad_t;
+         fpga_t(39)           <= hbi_ad_t;
+         fpga_t(34)           <= hbi_ad_t;
+         fpga_t( 4)           <= hbi_ad_t;
+         fpga_t_05            <= hbi_ad_t;
+         fpga_t_10            <= hbi_ad_t;
 
          fpga_o(22)           <= lan9254_hbiOb.cs;
-         fpga_t(22)           <= '0';
+         fpga_t(22)           <= hbi_ob_t;
 
          fpga_o(21)           <= lan9254_hbiOb.be(1);
-         fpga_t(21)           <= '0';
+         fpga_t(21)           <= hbi_ob_t;
 
          fpga_o(20)           <= lan9254_hbiOb.be(0);
-         fpga_t(20)           <= '0';
+         fpga_t(20)           <= hbi_ob_t;
 
          fpga_o(25)           <= lan9254_hbiOb.rs;
-         fpga_t(25)           <= '0';
+         fpga_t(25)           <= hbi_ob_t;
 
          fpga_o(24)           <= lan9254_hbiOb.ws;
-         fpga_t(24)           <= '0';
+         fpga_t(24)           <= hbi_ob_t;
 
          fpga_o(19)           <= lan9254_hbiOb.ale(0);
-         fpga_t(19)           <= '0';
+         fpga_t(19)           <= hbi_ob_t;
 
          axilIlaSpare0(15 downto  0) <= lan9254_hbiOb.ad(15 downto 0);
          axilIlaSpare0(17 downto 16) <= lan9254_hbiOb.ale;
