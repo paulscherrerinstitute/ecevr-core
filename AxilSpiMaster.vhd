@@ -1,6 +1,9 @@
 library ieee;
 use     ieee.std_logic_1164.all;
 
+-- AXI-Lite interface for the SLAC/surf SPI master
+-- (https://github.com/slaclab/surf)
+
 use     work.StdRtlPkg.all;
 use     work.AxiLitePkg.all;
 
