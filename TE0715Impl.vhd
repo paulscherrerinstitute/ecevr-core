@@ -1136,6 +1136,7 @@ begin
       signal spiSel        : std_logic := '0';
       signal axiSel        : std_logic := '0';
       signal escRst        : std_logic := '0';
+      signal hbiRst        : std_logic := '0';
 
       signal testFailed    : std_logic_vector(4 downto 0) := (others => '0');
    begin
@@ -1151,6 +1152,7 @@ begin
       spiSel       <= lan9254LocReg(1);
       axiSel       <= lan9254LocReg(2);
       escRst       <= lan9254LocReg(4);
+      hbiRst       <= lan9254LocReg(5);
 
       lan9254LocRegR(0) <= lan9254_irq;
 
@@ -1463,7 +1465,7 @@ begin
             )
             port map (
                clk          => sysClk,
-               rst          => escRst,
+               rst          => hbiRst,
 
                req          => hbiReq,
                rep          => hbiRep,
