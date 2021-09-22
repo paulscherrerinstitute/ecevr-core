@@ -9,7 +9,6 @@ use     work.Lan9254Pkg.all;
 entity AxilLan9254HbiMaster is
    generic (
       TPD_G              : time                 := 1 ns;
-      AXIL_CLK_PERIOD_G  : real;
       LOC_REG_ADDR_G     : std_logic_vector(15 downto 0) := x"3000";
       LOC_REG_INIT_G     : std_logic_vector(31 downto 0) := x"0000_0000"
    );
@@ -21,8 +20,8 @@ entity AxilLan9254HbiMaster is
       axilWriteMaster    : in  AxiLiteWriteMasterType;
       axilWriteSlave     : out AxiLiteWriteSlaveType;
 
-      hbiOut             : out Lan9254HBIOutType;
-      hbiInp             : in  Lan9254HBIInpType;
+      hbiReq             : out Lan9254ReqType;
+      hbiRep             : in  Lan9254RepType := LAN9254REP_INIT_C;
 
       locRegRW           : out std_logic_vector(31 downto 0);
       locRegR            : in  std_logic_vector(31 downto 0) := (others => '0')
@@ -87,8 +86,6 @@ architecture rtl of AxilLan9254HbiMaster is
       return be;
    end function calcBE;
 
-   signal hbiRep        : Lan9254RepType;
-
    type StateType       is (AXIL, HBI);
 
    type RegType is record
@@ -115,7 +112,7 @@ architecture rtl of AxilLan9254HbiMaster is
 
 begin
 
-   P_COMB : process(axilReadMaster, axilWriteMaster, axilRst, r, hbiRep, hbiInp, locRegR) is
+   P_COMB : process(axilReadMaster, axilWriteMaster, axilRst, r, hbiRep, locRegR) is
       variable v          : RegType;
       variable axilStatus : AxiLiteStatusType;
 
@@ -248,26 +245,11 @@ begin
       end if;
    end process P_SEQ;
 
-
-   U_HBI : entity work.Lan9254Hbi
-      generic map (
-         CLOCK_FREQ_G => (1.0/AXIL_CLK_PERIOD_G)
-      )
-      port map (
-         clk          => axilClk,
-         cen          => '1',
-         rst          => axilRst,
-
-         req          => r.hbiReq,
-         rep          => hbiRep,
-
-         hbiOut       => hbiOut,
-         hbiInp       => hbiInp
-      );
-
    axilReadSlave  <= r.axiLReadSlave;
    axilWriteSlave <= r.axiLWriteSlave;
 
    locRegRW       <= r.locReg3000;
+
+   hbiReq         <= r.hbiReq;
 
 end architecture rtl;
