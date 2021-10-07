@@ -470,35 +470,37 @@ begin
       spiOb(0).t.miso <= '1';
       spiOb(0).o.miso <= '0';
 
-   U_SPI_ILA : Ila_256
-      port map (
-         clk => sysClk,
-         probe0( 0) => spiIb(0).sclk,
-         probe0( 1) => spiOb(0).o.sclk,
-         probe0( 2) => spiOb(0).t.sclk,
+   GEN_SPI_ILA : if ( false ) generate
+      U_SPI_ILA : Ila_256
+         port map (
+            clk => sysClk,
+            probe0( 0) => spiIb(0).sclk,
+            probe0( 1) => spiOb(0).o.sclk,
+            probe0( 2) => spiOb(0).t.sclk,
 
-         probe0( 3) => spiIb(0).mosi,
-         probe0( 4) => spiOb(0).o.mosi,
-         probe0( 5) => spiOb(0).t.mosi,
+            probe0( 3) => spiIb(0).mosi,
+            probe0( 4) => spiOb(0).o.mosi,
+            probe0( 5) => spiOb(0).t.mosi,
 
-         probe0( 6) => spiIb(0).miso,
-         probe0( 7) => spiOb(0).o.miso,
-         probe0( 8) => spiOb(0).t.miso,
+            probe0( 6) => spiIb(0).miso,
+            probe0( 7) => spiOb(0).o.miso,
+            probe0( 8) => spiOb(0).t.miso,
 
-         probe0( 9) => spi0_ss_d(0),
-         probe0(10) => spiOb(0).o_ss(0),
-         probe0(11) => spiOb(0).t_ss0,
+            probe0( 9) => spi0_ss_d(0),
+            probe0(10) => spiOb(0).o_ss(0),
+            probe0(11) => spiOb(0).t_ss0,
 
-         probe0(12) => spi0_ss_d(1),
-         probe0(13) => spiOb(0).o_ss(1),
+            probe0(12) => spi0_ss_d(1),
+            probe0(13) => spiOb(0).o_ss(1),
 
-         probe0(14) => spi0_ss_d(2),
-         probe0(15) => spiOb(0).o_ss(2),
+            probe0(14) => spi0_ss_d(2),
+            probe0(15) => spiOb(0).o_ss(2),
 
-         probe0(63 downto 16) => (others => '0'),
+            probe0(63 downto 16) => (others => '0'),
 
-         probe1     => ila1
-      );
+            probe1     => ila1
+         );
+   end generate GEN_SPI_ILA;
 
    GEN_BUFDS : for i in 1 downto 0 generate
    begin
