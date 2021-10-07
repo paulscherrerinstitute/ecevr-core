@@ -1350,7 +1350,7 @@ begin
                escHbiRep     <= LAN9254REP_INIT_C;
             else
                hbiReq        <= escHbiReq;
-               axiHbiRep     <= LAN9254REP_INIT_C;
+               axiHbiRep     <= LAN9254REP_DFLT_C;
                escHbiRep     <= hbiRep;
             end if;
          end process P_HBI_MUX;
