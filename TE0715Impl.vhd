@@ -1638,7 +1638,7 @@ begin
             )
             port map (
                clk        => sysClk,
-               rst        => escRst,
+               rst        => sysRst,
                datInp(0)  => fpga_i(38),
                datOut(0)  => lan9254_irq
             );
