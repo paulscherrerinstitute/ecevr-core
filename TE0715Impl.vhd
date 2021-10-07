@@ -1478,9 +1478,9 @@ begin
          lan9254LocRegR(12 downto  8) <= ctlState;
          lan9254LocRegR(20 downto 16) <= testFailed;
 
-         U_ESC : entity work.Lan9254ESC
+         U_ESC : entity work.Lan9254ESCWrapper
             generic map (
-               CLK_FREQ_G   => CLK_FREQ_C
+               CLOCK_FREQ_G   => CLK_FREQ_C
             )
             port map (
                clk          => sysClk,
