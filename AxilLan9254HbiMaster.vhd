@@ -144,7 +144,7 @@ begin
                      when MISALIGNED =>
                            axiSlaveReadResponse( v.axilReadSlave, AXI_RESP_SLVERR_C );
                      when OK =>
-                           v.hbiReq.addr        := axilReadMaster.araddr(v.hbiReq.addr'range);
+                           v.hbiReq.addr        := unsigned(axilReadMaster.araddr(v.hbiReq.addr'range));
                            v.hbiReq.noAck       := axilReadMaster.araddr(16);
                            -- for smaller alignments we use BE and align the address
                            v.hbiReq.addr(1 downto 0) := (others => '0');
@@ -173,11 +173,11 @@ begin
                      when MISALIGNED =>
                            axiSlaveWriteResponse( v.axilWriteSlave, AXI_RESP_SLVERR_C );
                      when OK =>
-                           v.hbiReq.addr        := axilWriteMaster.awaddr(v.hbiReq.addr'range);
+                           v.hbiReq.addr        := unsigned(axilWriteMaster.awaddr(v.hbiReq.addr'range));
                            v.hbiReq.noAck       := axilWriteMaster.awaddr(16);
                            -- for smaller alignments we use BE and align the address
                            v.hbiReq.addr(1 downto 0) := (others => '0');
-                           v.hbiReq.wdata       := axilWriteMaster.wdata;
+                           v.hbiReq.data        := axilWriteMaster.wdata;
                            v.hbiReq.be          := ( BE_DEASS_C xor axilWriteMaster.wstrb );
                            v.hbiReq.rdnwr       := '0';
                            v.hbiReq.valid       := '1';
