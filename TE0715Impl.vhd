@@ -114,7 +114,7 @@ architecture top_level of TE0715 is
 
    constant ETH_MAC_C   : slv(47 downto 0) := x"aa0300564400";  -- 00:44:56:00:03:01 (ETH only)
 
-   constant NUM_AXI_SLV_C : natural        := 3;
+   constant NUM_AXI_SLV_C : natural        := 4;
 
    constant NUM_SPI_C     : positive       := 2;
 
@@ -1287,6 +1287,9 @@ begin
          signal hbi_ad_t       : std_logic := '1';
          signal hbi_ob_t       : std_logic := '1';
 
+         signal escStats       : StatCounterArray(21 downto 0);
+         signal diagRegsR      : Slv32Array(31 downto 0) := (others => (others => '0'));
+
       begin
 
          P_SPI_MUX : process (
@@ -1502,10 +1505,35 @@ begin
 
                irq          => lan9254_irq,
 
-               testFailed   => testFailed
+               testFailed   => testFailed,
+               stats        => escStats
             );
 
          txPDOMst.valid   <= '1';
+
+         U_DIAG_REGS : entity work.AxiLiteRegs
+            generic map (
+               NUM_READ_REG_G => diagRegsR'length
+            )
+            port map (
+               axiClk         => sysClk,
+               axiClkRst      => sysRst,
+
+               axiWriteMaster => axilWriteMasters(3),
+               axiWriteSlave  => axilWriteSlaves (3),
+               axiReadMaster  => axilReadMasters (3),
+               axiReadSlave   => axilReadSlaves  (3),
+               writeRegister  => open,
+               readRegister   => diagRegsR
+         );
+
+         P_DIAG_ASSIGN : process ( escStats ) is
+         begin
+            for i in escStats'range loop
+               diagRegsR(i)                    <= (others => '0');
+               diagRegsR(i)(escStats(i)'range) <= std_logic_vector(escStats(i));
+            end loop;
+         end process P_DIAG_ASSIGN;
 
          P_TXPDO : process ( sysClk ) is
          begin
