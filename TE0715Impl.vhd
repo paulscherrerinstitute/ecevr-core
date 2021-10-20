@@ -99,7 +99,7 @@ architecture top_level of TE0715 is
 
    constant FEEDTHRU_C  : natural          := ite( CLK_FEEDTHRU_G, 1, 0 );
 
-   constant TIMING_UDP_PORT_C       : natural := 8197;
+   constant TIMING_UDP_PORT_C       : natural := ite( not TBOX_C, 0, 8197 );
 
    constant TIMING_GTP_HAS_COMMON_C : boolean := ((not isArtix) or (TIMING_UDP_PORT_C = 0));
 
@@ -750,6 +750,7 @@ begin
          -- Clocking Configurations
          USE_GTREFCLK_G      => true, --  FALSE: gtClkP/N,  TRUE: gtRefClk
          -- PLL1 configuration (for timing line rate and 16-bit output width)
+         -- line rate is 2*PLL_CLOCK / PLL_DIVISOR
          PLL1_FBDIV_IN_G     => 2,
          PLL1_FBDIV_45_IN_G  => 5,
          -- AXI-Lite Configurations
