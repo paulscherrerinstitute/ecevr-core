@@ -1294,6 +1294,9 @@ begin
          signal escStats       : StatCounterArray(21 downto 0);
          signal diagRegsR      : Slv32Array(31 downto 0) := (others => (others => '0'));
 
+         signal phas           : signed(15 downto 0);
+         signal pdLocked       : std_logic;
+
       begin
 
          P_SPI_MUX : process (
@@ -1486,6 +1489,20 @@ begin
          ctlState                     <= axilIlaSpare2(4 downto 0);
          lan9254LocRegR(12 downto  8) <= ctlState;
          lan9254LocRegR(20 downto 16) <= testFailed;
+
+         U_PD  : entity work.PhaseDetector
+            port map (
+               pclk(0)      => timingOb.txClk,
+               pclk(1)      => timingOb.recClk,
+               clk          => sysClk,
+               rst          => sysRst,
+               locked       => pdLocked,
+               phas         => phas
+            );
+
+         diagRegsR(31)(31 downto 16) <= std_logic_vector(resize(phas,16));
+         diagRegsR(31)(15 downto  1) <= (others => '0');
+         diagRegsR(31)(           0) <= pdLocked;
 
          U_ESC : entity work.Lan9254ESCWrapper
             generic map (
