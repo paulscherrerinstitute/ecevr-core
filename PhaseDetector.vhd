@@ -12,7 +12,7 @@ entity PhaseDetector is
    );
    port (
       pclk       : in  std_logic_vector(1 downto 0);
-      
+
       clk        : in  std_logic;
       rst        : in  std_logic;
 
@@ -29,13 +29,19 @@ architecture rtl of PhaseDetector is
 
    signal       clkfb        : std_logic;
 
-   signal       phas_i       : signed(phas'range) := (others => '0');
+   signal       phas_i       : signed(23 downto 0) := (others => '0');
+
+   signal       det          : std_logic;
+
+   signal       pclk10       : std_logic;
+   signal       pclk10_i     : std_logic;
+
+   signal       pclk_ii      : std_logic_vector(pclk'range);
 begin
 
    GEN_FF : for i in pclk'range generate
       signal ffp     : std_logic_vector(pclk'range) := (others => '0');
       signal ffn     : std_logic_vector(pclk'range) := (others => '0');
-      signal pclk_ii : std_logic;
    begin
       P_FF : process ( pclk(i) ) is
       begin
@@ -47,7 +53,7 @@ begin
          end if;
       end process P_FF;
 
-      pclk_ii   <= ffp(i) xor ffn(i);
+      pclk_ii(i)  <= ffp(i) xor ffn(i);
 
       U_SYNC : entity work.Synchronizer
          generic map (
@@ -56,7 +62,7 @@ begin
          port map (
             clk      => detclk,
             rst      => '0',
-            dataIn   => pclk_ii,
+            dataIn   => pclk_ii(i),
             dataOut  => pclk_i(i)
          );
    end generate GEN_FF;
@@ -141,6 +147,7 @@ begin
          O => detclk
       );
 
+
    U_SYNC_V : entity work.Synchronizer
       generic map (
          STAGES_G => 3
@@ -168,7 +175,7 @@ begin
       if ( rising_edge( detclk ) ) then
          if ( ack_wr = vld_wr ) then
             vld_wr  <= not vld_wr;
-            mbox_wr <= phas_i;
+            mbox_wr <= phas_i(phas_i'left downto phas_i'left - mbox_wr'length + 1);
          end if;
       end if;
    end process P_MBOX_WR;
@@ -190,20 +197,48 @@ begin
    GEN_NO_MMCM : if ( not USE_MMCM_G ) generate
       locked <= '1';
       detclk <= clk;
-      phas   <= phas_i;
+      phas   <= phas_i(phas_i'left downto phas_i'left - phas'length + 1);
    end generate GEN_NO_MMCM;
 
+   U_SYNC_10 : entity work.Synchronizer
+      generic map (
+         STAGES_G => 3
+      )
+      port map (
+         clk      => pclk(0),
+         rst      => '0',
+         dataIn   => pclk_ii(1),
+         dataOut  => pclk10_i
+      );
+
+   U_SYNC_P : entity work.Synchronizer
+      generic map (
+         STAGES_G => 3
+      )
+      port map (
+         clk      => detclk,
+         rst      => '0',
+         dataIn   => pclk10_i,
+         dataOut  => pclk10
+      );
+
+   det <= pclk_i(0) xor pclk_i(1);
+
    P_FILT : process ( detclk ) is
+      constant PONE : signed(phas_i'range) := ( phas_i'left => '0', (phas_i'left - 1) => '1', others => '0' );
+      constant MONE : signed(phas_i'range) := - PONE;
+      constant ZERO : signed(phas_i'range) := (others => '0');
+      constant SHFT : natural              := phas_i'length - 13;
    begin
       if ( rising_edge ( detclk ) ) then
-         if ( ( pclk_i(0) xor pclk_i(1) ) = '1' ) then 
-            if ( phas_i(phas_i'left downto phas_i'left - 1) /= "01" ) then
-               phas_i <= phas_i + 1;
+         if ( det = '1' ) then
+            if ( pclk10 = '1' ) then
+               phas_i <= phas_i + shift_right(PONE - phas_i, SHFT);
+            else
+               phas_i <= phas_i + shift_right(MONE - phas_i, SHFT);
             end if;
          else
-            if ( phas_i(phas_i'left downto phas_i'left - 1) /= "10" ) then
-               phas_i <= phas_i - 1;
-            end if;
+               phas_i <= phas_i + shift_right(ZERO - phas_i, SHFT);
          end if;
       end if;
    end process P_FILT;

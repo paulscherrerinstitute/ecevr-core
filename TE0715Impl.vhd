@@ -1286,9 +1286,6 @@ begin
          signal escState       : ESCStateType;
          signal ctlState       : std_logic_vector(4 downto 0);
 
-         signal udpMst         : UdpStrmMstType    := UDP_STRM_MST_INIT_C;
-         signal udpRdy         : std_logic         := '1';
-
          signal hbi_ad_t       : std_logic := '1';
          signal hbi_ob_t       : std_logic := '1';
 
@@ -1524,12 +1521,6 @@ begin
 
                rxPDOMst     => rxPDOMst,
                rxPDORdy     => rxPDORdy,
-
-               udpRxMst     => udpMst,
-               udpRxRdy     => udpRdy,
-
-               udpTxMst     => udpMst,
-               udpTxRdy     => udpRdy,
 
                irq          => lan9254_irq,
 
