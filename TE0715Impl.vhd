@@ -53,6 +53,7 @@ use work.Ila_256Pkg.all;
 use work.Lan9254Pkg.all;
 use work.Lan9254ESCPkg.all;
 use work.MicroUDPPkg.all;
+use work.Udp2BusPkg.all;
 
 library unisim;
 use unisim.vcomponents.all;
@@ -1097,6 +1098,9 @@ begin
       constant NUM_LAN_GPI_C  : natural := 8;
       constant NUM_LAN_GPO_C  : natural := 8;
 
+      constant NUM_UDP_SUBS_C : natural := 1;
+      constant UDP_IDX_EVR_C  : natural := 0;
+
       constant LATCH0_MAP_C   : natural := ite( (PRJ_VARIANT_G = "ecevr-dio"), 0, 42 );
       constant LATCH1_MAP_C   : natural := ite( (PRJ_VARIANT_G = "ecevr-dio"), 38, 43 );
 
@@ -1294,6 +1298,9 @@ begin
 
          signal phas           : signed(15 downto 0);
          signal pdLocked       : std_logic;
+
+         signal udp2BusReq     : Udp2BusReqArray(NUM_UDP_SUBS_C - 1 downto 0);
+         signal udp2BusRep     : Udp2BusRepArray(NUM_UDP_SUBS_C - 1 downto 0);
 
       begin
 
@@ -1504,7 +1511,8 @@ begin
 
          U_ESC : entity work.Lan9254ESCWrapper
             generic map (
-               CLOCK_FREQ_G   => CLK_FREQ_C
+               CLOCK_FREQ_G   => CLK_FREQ_C,
+               NUM_UDP_SUBS_G => NUM_UDP_SUBS_C
             )
             port map (
                clk          => sysClk,
@@ -1516,6 +1524,9 @@ begin
                req          => escHbiReq,
                rep          => escHbiRep,
 
+               udp2BusReq   => udp2BusReq,
+               udp2BusRep   => udp2BusRep,
+
                txPDOMst     => txPDOMst,
                txPDORdy     => txPDORdy,
 
@@ -1526,6 +1537,28 @@ begin
 
                testFailed   => testFailed,
                stats        => escStats
+            );
+
+         U_EVR : entity work.evr320_udp2bus_wrapper
+            generic map (
+               g_BUS_CLOCK_FREQ  => natural( CLK_FREQ_C ),
+               g_N_EVT_DBL_BUFS  => 0,
+               g_DATA_STREAM_EN  => 1,
+               g_EVR_FORCE_STBL  => '1'
+            )
+            port map (
+               bus_CLK           => sysClk,
+               bus_RESET         => sysRst,
+
+               bus_Req           => udp2BusReq(UDP_IDX_EVR_C),
+               bus_Rep           => udp2BusRep(UDP_IDX_EVR_C),
+
+               clk_evr           => timingRecClk,
+               rst_evr           => timingRecRst,
+
+               evr_rx_data       => x"0000",
+               evr_rx_charisk    => "00",
+               mgt_status_i      => x"0000_0000"
             );
 
          txPDOMst.valid   <= '1';
