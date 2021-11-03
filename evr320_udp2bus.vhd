@@ -237,8 +237,8 @@ begin
         rberr  <= '0';
       elsif ( (bus_Req.valid and bus_Req.rdnwr) = '1') then
         rberr  <= '0';
+        rvalid <= not rvalid; -- equivalent to delay by 1 cycle
         if (bus_Req.dwaddr(g_ADDR_MSB downto REG_ADDR_WIDTH) = c_LOW(g_ADDR_MSB downto REG_ADDR_WIDTH)) then
-          rvalid     <= not rvalid; -- equivalent to delay by 1 cycle
           case bus_Req.dwaddr(REG_ADDR_MSB downto DWRD_ADDR_LSB) is
             when X"0" & "0" => rdata <=  misc_status & mgt_status_evr;       -- 32bit / ByteAddr 000
             when X"0" & "1" => rdata <=  event_numbers_concat;               -- 32bit / ByteAddr 004
