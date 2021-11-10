@@ -1677,27 +1677,19 @@ begin
             t      => (others => '0')
          );
 
-      U_LED_BUF      : entity work.ZynqIOBuf
-         generic map (
-            W_G   => led'length
-         )
-         port map (
-            io( 0) => B13_L15_N,
-            io( 1) => B13_L15_P,
-            io( 2) => B13_L20_P,
-            io( 3) => B13_L20_N,
-            io( 4) => B13_L21_P,
-            io( 5) => B13_L21_N,
-            io( 6) => B13_L18_N,
-            io( 7) => B13_L18_P,
-            io( 8) => B13_L3_P,
-            io( 9) => B13_L3_N,
-            io(10) => B13_L5_N,
-
-            i      => led,
-            o      => open,
-            t      => (others => '0')
-         );
+      -- must not use ZynqIOBuf here because the 'tbox' project variant
+      -- uses TMDS_33 for some of these pins which can only be uni-directional
+      B13_L15_N <= led( 0);
+      B13_L15_P <= led( 1);
+      B13_L20_P <= led( 2);
+      B13_L20_N <= led( 3);
+      B13_L21_P <= led( 4);
+      B13_L21_N <= led( 5);
+      B13_L18_N <= led( 6);
+      B13_L18_P <= led( 7);
+      B13_L3_P  <= led( 8);
+      B13_L3_N  <= led( 9);
+      B13_L5_N  <= led(10);
 
       -- ylo led in PS-ethernet connector
       led(8)          <= not timingTxStat.resetDone;
