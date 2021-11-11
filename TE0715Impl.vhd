@@ -611,7 +611,7 @@ begin
          AXIL_BASE_ADDR_G        => x"40000000",
          IP_ADDR_G               => x"410AA8C0",  -- 192.168.2.10 (ETH only)
          MAC_ADDR_G              => ETH_MAC_C,
-         TPGMINI_G               => true, --(not isArtix),
+         TPGMINI_G               => true,
          GEN_TIMING_G            => true,
          TIMING_UDP_MSG_G        => (TIMING_UDP_PORT_C /= 0),
          TIMING_GTP_HAS_COMMON_G => TIMING_GTP_HAS_COMMON_C,
@@ -1496,6 +1496,10 @@ begin
          lan9254LocRegR(20 downto 16) <= testFailed;
 
          U_PD  : entity work.PhaseDetector
+            generic map (
+               CLK_PERIOD_G => 5.385, -- ns
+               DECM_MULT_G  => 256
+            )
             port map (
                pclk(0)      => timingOb.txClk,
                pclk(1)      => timingOb.recClk,

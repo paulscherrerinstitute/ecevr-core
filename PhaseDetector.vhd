@@ -1,14 +1,17 @@
 library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
+use ieee.math_real.all;
 
 library unisim;
 use     unisim.vcomponents.all;
 
 entity PhaseDetector is
    generic (
-      FLEN_G     : natural := 16;
-      USE_MMCM_G : boolean := true
+      FLEN_G       : natural  := 16;
+      USE_MMCM_G   : boolean  := true;
+      DECM_MULT_G  : positive := 1;
+      CLK_PERIOD_G : real         -- in ns.
    );
    port (
       pclk       : in  std_logic_vector(1 downto 0);
@@ -22,6 +25,52 @@ entity PhaseDetector is
 end entity PhaseDetector;
 
 architecture rtl of PhaseDetector is
+   constant     USE_IIR_C    : boolean := false;
+
+   -- fdet = fin * (FBDIV_INT_C*8 + FBDIV_8TH_C)/(ODIV_INT_C*8 + ODIV_8TH_C);
+   --
+   -- fdel = fin - fdet = fdet ((8*ODIV_INT_C + ODIV_8TH_C) / (FBDIV_INT_C*8 + FBDIV_8TH_C) - 1)
+   --      assuming ODIV_INT_C == FBDIV_INT_C
+   -- fdel = fdet * (ODIV_8TH_C - FBDIV_8TH_C)/(FBDIV_INT_C*8 + FBDIV_8TH_C)
+   --
+   -- fdel smallest if | ODIV_8TH_C - FBDIV_8TH_C | = 1
+   --                    ODIV_8TH_C = FBDIV_8TH_C +/- 1
+   function check(constant l : string; constant x : real) return real is
+   begin
+      report l & " " & real'image(x);
+      return x;
+   end function check;
+
+   function check(constant l : string; constant x : natural) return natural is
+   begin
+      report l & " " & integer'image(x);
+      return x;
+   end function check;
+
+
+   constant     VCO_MAX_C    : real    := 1.4400; -- GHz
+   constant     FBDIV_REA_C  : real    := check("FBDIV_REA_C", VCO_MAX_C * CLK_PERIOD_G);
+   constant     FBDIV_INT_C  : natural := check("FBDIV_INT_C", natural( floor( FBDIV_REA_C ) ));
+   constant     FBDIV_FRC_C  : real    := check("FBDIV_FRC_C", FBDIV_REA_C - real(FBDIV_INT_C));
+   constant     FBDIV_8TH_C  : natural := check("FBDIV_8TH_C", natural( check("FBDIV_8TH_PRE", floor( 8.0 * FBDIV_FRC_C) ) ));
+   constant     ODIV_INT_C   : natural := FBDIV_INT_C;
+   constant     ODIV_8TH_C   : natural := FBDIV_8TH_C + 1;
+
+   constant     MULT_F_C     : real    := real(FBDIV_INT_C) + 0.125*real(FBDIV_8TH_C);
+   constant     DIV0_F_C     : real    := real(ODIV_INT_C ) + 0.125*real(ODIV_8TH_C );
+
+   constant     PHAS_MAX_C   : natural := DECM_MULT_G * (8 * FBDIV_INT_C + FBDIV_8TH_C);
+
+   function PHAS_BITS_F return natural is
+      variable l : natural;
+   begin
+      -- full range is - PHAS_MAX_C .. + PHAS_MAX_C;
+      l := natural( floor( log2( real( 2 * PHAS_MAX_C ) ) ) ) + 1;
+      if ( l < FLEN_G ) then
+         l := FLEN_G;
+      end if;
+      return l;
+   end function PHAS_BITS_F;
 
    signal       pclk_i       : std_logic_vector(pclk'range);
    signal       detclk       : std_logic;
@@ -29,7 +78,7 @@ architecture rtl of PhaseDetector is
 
    signal       clkfb        : std_logic;
 
-   signal       phas_i       : signed(23 downto 0) := (others => '0');
+   signal       phas_i       : signed(PHAS_BITS_F - 1 downto 0) := (others => '0');
 
    signal       det          : std_logic;
 
@@ -38,6 +87,11 @@ architecture rtl of PhaseDetector is
 
    signal       pclk_ii      : std_logic_vector(pclk'range);
 begin
+
+   assert false report "DIV_i "   & integer'image(ODIV_INT_C)
+                     & " ODIV_f " & integer'image(ODIV_8TH_C)
+                     & " FDIV_f " & integer'image(FBDIV_8TH_C)
+                severity note;
 
    GEN_FF : for i in pclk'range generate
       signal ffp     : std_logic_vector(pclk'range) := (others => '0');
@@ -82,9 +136,10 @@ begin
    U_MMCM : MMCME2_BASE
    generic map (
       BANDWIDTH          => "OPTIMIZED",  -- Jitter programming (OPTIMIZED, HIGH, LOW)
-      CLKFBOUT_MULT_F    => 7.0,    -- Multiply value for all CLKOUT (2.000-64.000).
+      -- Artix-7 VCO fmax[MHz]: 1600 (speed -3), 1440 (speed -2), 1200 (speed -1)
+      CLKFBOUT_MULT_F    => MULT_F_C,    -- Multiply value for all CLKOUT (2.000-64.000).
       CLKFBOUT_PHASE     => 0.0,     -- Phase offset in degrees of CLKFB (-360.000-360.000).
-      CLKIN1_PERIOD      => 0.0,      -- Input clock period in ns to ps resolution (i.e. 33.333 is 30 MHz).
+      CLKIN1_PERIOD      => CLK_PERIOD_G,      -- Input clock period in ns to ps resolution (i.e. 33.333 is 30 MHz).
       -- CLKOUT0_DIVIDE - CLKOUT6_DIVIDE: Divide amount for each CLKOUT (1-128)
       CLKOUT1_DIVIDE     => 7,
       CLKOUT2_DIVIDE     => 7,
@@ -92,7 +147,7 @@ begin
       CLKOUT4_DIVIDE     => 7,
       CLKOUT5_DIVIDE     => 7,
       CLKOUT6_DIVIDE     => 7,
-      CLKOUT0_DIVIDE_F   => 7.125,   -- Divide amount for CLKOUT0 (1.000-128.000).
+      CLKOUT0_DIVIDE_F   => DIV0_F_C,   -- Divide amount for CLKOUT0 (1.000-128.000).
       -- CLKOUT0_DUTY_CYCLE - CLKOUT6_DUTY_CYCLE: Duty cycle for each CLKOUT (0.01-0.99).
       CLKOUT0_DUTY_CYCLE => 0.5,
       CLKOUT1_DUTY_CYCLE => 0.5,
@@ -224,8 +279,20 @@ begin
 
    det <= pclk_i(0) xor pclk_i(1);
 
+   G_IIR : if ( USE_IIR_C ) generate
+
    P_FILT : process ( detclk ) is
-      constant PONE : signed(phas_i'range) := ( phas_i'left => '0', (phas_i'left - 1) => '1', others => '0' );
+
+      function PONE_F(constant x : in signed) return signed is
+         variable v : signed(x'range);
+      begin
+         v := (others => '0');
+         v( v'left     ) := '0';
+         v( v'left - 1 ) := '1';
+         return v;
+      end function PONE_F;
+
+      constant PONE : signed(phas_i'range) := PONE_F(phas_i);
       constant MONE : signed(phas_i'range) := - PONE;
       constant ZERO : signed(phas_i'range) := (others => '0');
       constant SHFT : natural              := phas_i'length - 13;
@@ -242,5 +309,40 @@ begin
          end if;
       end if;
    end process P_FILT;
+
+   end generate G_IIR;
+
+   G_CIC : if ( not USE_IIR_C ) generate
+
+      constant DECM_C : natural            := PHAS_MAX_C - 1;
+
+      signal phas_l   : signed(phas_i'range) := (others => '0');
+      signal phas_a   : signed(phas_i'range) := (others => '0');
+
+      signal decm     : natural range 0 to DECM_C := 0;
+
+
+   begin
+
+   P_FILT : process ( detclk ) is
+   begin
+      if ( rising_edge ( detclk ) ) then
+         if ( decm = 0 ) then
+            phas_l <= phas_a;
+            phas_i <= phas_a - phas_l;
+            decm   <= DECM_C;
+         else
+            decm   <= decm - 1;
+         end if;
+         if ( det = '1' ) then
+            if ( pclk10 = '1' ) then
+               phas_a <= phas_a + 1;
+            else
+               phas_a <= phas_a - 1;
+            end if;
+         end if;
+      end if;
+   end process P_FILT;
+   end generate G_CIC;
 
 end architecture rtl;
