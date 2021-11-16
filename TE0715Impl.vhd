@@ -162,6 +162,7 @@ architecture top_level of TE0715 is
 
    signal   timingIb    : TimingWireIbType := TIMING_WIRE_IB_INIT_C;
    signal   timingOb    : TimingWireObType := TIMING_WIRE_OB_INIT_C;
+   signal   timingRx    : TimingRxType     := TIMING_RX_INIT_C;
 
    signal   sfp_tx_dis  : slv(NUM_SFPS_G - 1 downto 0) := (others => '0');
    signal   sfp_tx_flt  : slv(NUM_SFPS_G - 1 downto 0);
@@ -644,6 +645,7 @@ begin
          -- Timing
          timingIb             => timingIb,
          timingOb             => timingOb,
+         timingRx             => timingRx,
 
          -- ADC Ports
          vPIn                 => '0',
@@ -1302,6 +1304,8 @@ begin
          signal udp2BusReq     : Udp2BusReqArray(NUM_UDP_SUBS_C - 1 downto 0);
          signal udp2BusRep     : Udp2BusRepArray(NUM_UDP_SUBS_C - 1 downto 0);
 
+         signal timingMGTSt    : std_logic_vector(31 downto 0) := (others => '0');
+
       begin
 
          P_SPI_MUX : process (
@@ -1547,8 +1551,7 @@ begin
             generic map (
                g_BUS_CLOCK_FREQ  => natural( CLK_FREQ_C ),
                g_N_EVT_DBL_BUFS  => 0,
-               g_DATA_STREAM_EN  => 1,
-               g_EVR_FORCE_STBL  => '1'
+               g_DATA_STREAM_EN  => 1
             )
             port map (
                bus_CLK           => sysClk,
@@ -1560,10 +1563,23 @@ begin
                clk_evr           => timingRecClk,
                rst_evr           => timingRecRst,
 
-               evr_rx_data       => x"0000",
-               evr_rx_charisk    => "00",
-               mgt_status_i      => x"0000_0000"
+               evr_rx_data       => timingRx.data,
+               evr_rx_charisk    => timingRx.dataK,
+               mgt_status_i      => timingMGTSt
             );
+
+         timingMGTSt <= (
+             0     => timingIb.pllLocked,
+             1     => timingIb.pllLocked,
+             2     => '1', -- (non-existing/needed MMCM locked)
+             3     => timingOb.txStat.resetDone,
+             4     => timingOb.rxStat.resetDone,
+             18    => timingRx.decErr(0),
+             19    => timingRx.decErr(1),
+             20    => timingRx.dspErr(0),
+             21    => timingRx.dspErr(1),
+            others => '0'
+         );
 
          txPDOMst.valid   <= '1';
 
