@@ -1306,6 +1306,8 @@ begin
 
          signal timingMGTSt    : std_logic_vector(31 downto 0) := (others => '0');
 
+         signal usr_evts_adj   : std_logic_vector(3 downto 0);
+
       begin
 
          P_SPI_MUX : process (
@@ -1563,10 +1565,15 @@ begin
                clk_evr           => timingRecClk,
                rst_evr           => timingRecRst,
 
+               usr_events_adj_o  => usr_evts_adj,
+
                evr_rx_data       => timingRx.data,
                evr_rx_charisk    => timingRx.dataK,
                mgt_status_i      => timingMGTSt
             );
+
+         ec_LATCH_o(0) <= usr_evts_adj(0);
+         ec_LATCH_t(0) <= '0'; -- out
 
          timingMGTSt <= (
              0     => timingIb.pllLocked,
