@@ -6,7 +6,7 @@
 -- ---------------------------------------------------------------------------
 -- Copyright (c) PSI, Section DSV
 -- ---------------------------------------------------------------------------
--- Comment : TMEM address decoding for register and memory access to evr320.
+-- Comment : UDP2BUS address decoding for register and memory access to evr320.
 -- ---------------------------------------------------------------------------
 library ieee;
 use ieee.std_logic_1164.all;
@@ -19,7 +19,8 @@ use work.Udp2BusPkg.all;
 entity evr320_udp2bus is
   generic (
     g_CS_TIMEOUT_CNT              : natural := 16#15CA20#; -- data frame checksum timeout (in EVR clks); 0 disables
-    g_ADDR_MSB                    : natural
+    g_ADDR_MSB                    : natural;
+    g_USR_CONTROL_INIT            : std_logic_vector(31 downto 0) := (others => '0')
   );
   port(
     -- ------------------------------------------------------------------------
@@ -46,6 +47,8 @@ entity evr320_udp2bus is
     mem_addr_o                    : out   std_logic_vector(10 downto  0); 
     mem_data_i                    : in    std_logic_vector(31 downto  0);
     misc_status_i                 : in    std_logic_vector(15 downto  0);
+    usr_status_i                  : in    std_logic_vector(31 downto  0) := (others => '0'); -- not resynced
+    usr_control_o                 : out   std_logic_vector(31 downto  0);
     ---------------------------------------------------------------------------
     -- EVR320 pulse output paremters
     ---------------------------------------------------------------------------
@@ -107,6 +110,7 @@ architecture rtl of evr320_udp2bus is
   signal cs_timeout_cnt         : std_logic_vector(31 downto 0)   := std_logic_vector(to_unsigned(g_CS_TIMEOUT_CNT, 32));
   signal evr_frequency_sync     : std_logic_vector(31 downto 0)   := (others => '0');
   signal evr_frequency          : std_logic_vector(31 downto 0)   := (others => '0');
+  signal usr_control            : std_logic_vector(31 downto 0)   := g_USR_CONTROL_INIT;
   
   -- event recorder    
   signal er_status              : typ_evt_rec_status              := c_INIT_EVT_REC_STATUS;
@@ -250,8 +254,8 @@ begin
             when X"3" & "1" => rdata <=  evr_frequency;                      -- 32bit / ByteAddr 01c
             when X"4" & "0" => rdata <=  cs_min_cnt;                         -- 32bit / ByteAddr 020
             when X"4" & "1" => rdata <=  cs_min_time;                        -- 32bit / ByteAddr 024
-            when X"5" & "0" => rdata <=  reserved;                           -- 32bit / ByteAddr 028
-            when X"5" & "1" => rdata <=  reserved;                           -- 32bit / ByteAddr 02c
+            when X"5" & "0" => rdata <=  usr_status_i;                       -- 32bit / ByteAddr 028
+            when X"5" & "1" => rdata <=  usr_control;                        -- 32bit / ByteAddr 02c
             when X"6" & "0" => rdata <=  x"00" & lat_event_detected & "000000" & lat_counter_autoarm & lat_counter_arm & lat_event_nr; -- 32bit / ByteAddr 030
             when X"6" & "1" => rdata <=  lat_counter_val;                    -- 32bit / ByteAddr 034
             when X"7" & "0" => rdata <=  reserved;                           -- 32bit / ByteAddr 038
@@ -392,7 +396,11 @@ begin
               if bus_Req.be(1) = '1' then cs_min_time   (15 downto  8) <= bus_Req.data(15 downto  8); end if;
               if bus_Req.be(2) = '1' then cs_min_time   (23 downto 16) <= bus_Req.data(23 downto 16); end if;
               if bus_Req.be(3) = '1' then cs_min_time   (31 downto 24) <= bus_Req.data(31 downto 24); end if;
-            when X"5" & "0" => -- 0x28
+            when X"5" & "0" => -- 0x28 (read-only)
+              if bus_Req.be(0) = '1' then usr_control   ( 7 downto  0) <= bus_Req.data( 7 downto  0); end if;
+              if bus_Req.be(1) = '1' then usr_control   (15 downto  8) <= bus_Req.data(15 downto  8); end if;
+              if bus_Req.be(2) = '1' then usr_control   (23 downto 16) <= bus_Req.data(23 downto 16); end if;
+              if bus_Req.be(3) = '1' then usr_control   (31 downto 24) <= bus_Req.data(31 downto 24); end if;
             when X"5" & "1" => -- 0x2c
             when X"6" & "0" => -- 0x30
               if bus_Req.be(0) = '1' then lat_event_nr  ( 7 downto  0) <= bus_Req.data( 7 downto  0); end if;
@@ -474,6 +482,7 @@ begin
   mgt_reset_o                 <= mgt_reset;
   evr_latency_measure_ctrl_o  <= (event_nr => lat_event_nr, counter_arm => lat_counter_arm, auto_arm => lat_counter_autoarm);
   mgt_control_o               <= mgt_control;
+  usr_control_o               <= usr_control;
 
   -- --------------------------------------------------------------------------
   -- add CDC output

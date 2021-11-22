@@ -6,7 +6,7 @@
 -- ---------------------------------------------------------------------------
 -- Copyright© PSI, Section DSV
 -- ---------------------------------------------------------------------------
--- Comment : Wraps evr320 decoder together UDP2BUS registers.
+-- Comment : Wraps evr320 decoder together with UDP2BUS registers.
 -- ---------------------------------------------------------------------------
 library ieee;
 use ieee.std_logic_1164.all;
@@ -49,6 +49,12 @@ entity evr320_udp2bus_wrapper is
     mgt_status_i     : in  std_logic_vector(31 downto 0) := (others => '0');
     mgt_reset_o      : out std_logic;
     mgt_control_o    : out std_logic_vector(31 downto 0);
+
+    event_o          : out std_logic_vector( 7 downto 0);
+    event_vld_o      : out std_logic;
+    timestamp_hi_o   : out std_logic_vector(31 downto 0);
+    timestamp_lo_o   : out std_logic_vector(31 downto 0);
+    timestamp_strb_o : out std_logic;
     ---------------------------------------------------------------------------
     -- User interface MGT clock
     ---------------------------------------------------------------------------
@@ -80,6 +86,12 @@ architecture rtl of evr320_udp2bus_wrapper is
   constant c_EVR_REG64_COUNT    : integer := 16; -- unused, only documentation
   constant c_EVR_MEM_SIZE       : integer := 16384; -- unused, only documentation
 
+  constant c_TS_BIT_0_EVENT     : std_logic_vector(7 downto 0) := x"70";
+  constant c_TS_BIT_1_EVENT     : std_logic_vector(7 downto 0) := x"71";
+  constant c_TS_CLOCK_EVENT     : std_logic_vector(7 downto 0) := x"7C";
+  constant c_TS_LATCH_EVENT     : std_logic_vector(7 downto 0) := x"7D";
+
+  constant c_TS_MODE_EVR_CLK    : std_logic := '0';
   -- --------------------------------------------------------------------------
   -- Signal definitions
   -- --------------------------------------------------------------------------
@@ -103,6 +115,15 @@ architecture rtl of evr320_udp2bus_wrapper is
   signal decoder_event                : std_logic_vector(7 downto 0);
   signal decoder_status               : std_logic_vector(15 downto 0);
   signal misc_status                  : std_logic_vector(15 downto 0) := (others => '0');
+  signal timestampHi                  : std_logic_vector(31 downto 0) := (others => '0');
+  signal timestampSR                  : std_logic_vector(31 downto 0) := (others => '0');
+  signal timestampLo                  : std_logic_vector(31 downto 0) := (others => '0');
+  signal timestampStrobe              : std_logic                     := '0';
+  signal timestampLoMode              : std_logic                     := '0';
+  signal timestampLoMode_sync         : std_logic                     := '0';
+  signal timestampLoMode_xuser        : std_logic                     := '0';
+  signal usr_status                   : std_logic_vector(31 downto 0) := (others => '0');
+  signal usr_control                  : std_logic_vector(31 downto 0);
 
   -- --------------------------------------------------------------------------
   -- Attribute definitions
@@ -139,12 +160,17 @@ begin
       event_recorder_control_sync <= event_recorder_control_xuser;
       event_recorder_control      <= event_recorder_control_sync;
       ---
+      timestampLoMode_sync        <= timestampLoMode_xuser;
+      timestampLoMode             <= timestampLoMode_sync;
+      ---
     end if;
   end process;
 
   misc_status(15 downto 7) <= (others => '0');
 
   misc_status( 3 downto 0) <= decoder_status(3 downto 0);
+
+  timestampLoMode_xuser    <= usr_control(0);
 
   -- --------------------------------------------------------------------------
   -- EVR320 Decoder
@@ -222,6 +248,8 @@ begin
       mem_addr_o                 => mem_addr_tosca,
       mem_data_i                 => mem_data,
       misc_status_i              => misc_status,
+      usr_status_i               => usr_status,
+      usr_control_o              => usr_control,
       -- 
       evr_clk_i                  => clk_evr,
       evr_rst_i                  => evr_rst_s,
@@ -410,9 +438,51 @@ begin
   end block;
 
   -- --------------------------------------------------------------------------
+  -- Timestamp decoder
+  -- --------------------------------------------------------------------------
+  prc_ts : process(clk_evr) is
+  begin
+    if ( rising_edge( clk_evr ) ) then
+       if ( rst_evr = '1' ) then
+          timestampLo     <= (others => '0');
+          timestampHi     <= (others => '0');
+          timestampSR     <= (others => '0');
+          timestampStrobe <= '0';
+       else
+          timestampStrobe <= '0';
+          if ( c_TS_MODE_EVR_CLK = timestampLoMode ) then
+             timestampLo <= std_logic_vector( unsigned( timestampLo ) + 1 );
+          end if;
+          if ( decoder_event_valid = '1' ) then
+             if    ( decoder_event = c_TS_LATCH_EVENT ) then
+                timestampHi     <= timestampSR;
+                timestampLo     <= (others => '0');
+                timestampStrobe <= '1';
+             elsif ( decoder_event = c_TS_BIT_0_EVENT ) then
+                timestampSR     <= timestampSR(timestampSR'left - 1 downto 0) & '0';
+             elsif ( decoder_event = c_TS_BIT_1_EVENT ) then
+                timestampSR     <= timestampSR(timestampSR'left - 1 downto 0) & '1';
+             elsif ( decoder_event = c_TS_CLOCK_EVENT ) then
+                if ( not c_TS_MODE_EVR_CLK = timestampLoMode ) then
+                   timestampLo <= std_logic_vector( unsigned( timestampLo ) + 1 );
+                end if;
+             end if;
+          end if;
+       end if;
+    end if;
+  end process prc_ts;
+
+  -- --------------------------------------------------------------------------
   -- port mapping
   -- --------------------------------------------------------------------------
-  debug        <= debug_data;
+  debug            <= debug_data;
+
+  event_o          <= decoder_event;
+  event_vld_o      <= decoder_event_valid;
+
+  timestamp_lo_o   <= timestampLo;
+  timestamp_hi_o   <= timestampHi;
+  timestamp_strb_o <= timestampStrobe;
 
 end rtl;
 -- ----------------------------------------------------------------------------

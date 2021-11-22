@@ -54,6 +54,7 @@ use work.Lan9254Pkg.all;
 use work.Lan9254ESCPkg.all;
 use work.MicroUDPPkg.all;
 use work.Udp2BusPkg.all;
+use work.EvrTxPDOPkg.all;
 
 library unisim;
 use unisim.vcomponents.all;
@@ -1100,8 +1101,19 @@ begin
       constant NUM_LAN_GPI_C  : natural := 8;
       constant NUM_LAN_GPO_C  : natural := 8;
 
-      constant NUM_UDP_SUBS_C : natural := 1;
-      constant UDP_IDX_EVR_C  : natural := 0;
+      constant NUM_BUS_MSTS_C : natural := 1;
+      constant BUS_MIDX_PDO_C : natural := 0;
+
+      constant EVR_BASE_ADDR_C: unsigned(31 downto 0) := x"0000_0000";
+
+      constant NUM_BUS_SUBS_C : natural := 1;
+      constant BUS_SIDX_EVR_C : natural := 0;
+
+      constant NUM_HBI_MSTS_C : natural := 1;
+      constant PRI_HBI_MSTS_C : integer := -1;
+      constant HBI_MIDX_PDO_C : integer := PRI_HBI_MSTS_C;
+      constant HBI_MSTS_LDX_C : integer := PRI_HBI_MSTS_C;
+      constant HBI_MSTS_RDX_C : integer := HBI_MSTS_LDX_C + NUM_HBI_MSTS_C - 1;
 
       constant LATCH0_MAP_C   : natural := ite( (PRJ_VARIANT_G = "ecevr-dio"), 0, 42 );
       constant LATCH1_MAP_C   : natural := ite( (PRJ_VARIANT_G = "ecevr-dio"), 38, 43 );
@@ -1283,9 +1295,6 @@ begin
          signal hbiReq         : Lan9254ReqType;
          signal hbiRep         : Lan9254RepType;
 
-         signal txPDOMst       : Lan9254PDOMstType := LAN9254PDO_MST_INIT_C;
-         signal txPDORdy       : std_logic;
-
          signal rxPDOMst       : Lan9254PDOMstType;
          signal rxPDORdy       : std_logic := '1';
 
@@ -1301,12 +1310,22 @@ begin
          signal phas           : signed(15 downto 0);
          signal pdLocked       : std_logic;
 
-         signal udp2BusReq     : Udp2BusReqArray(NUM_UDP_SUBS_C - 1 downto 0);
-         signal udp2BusRep     : Udp2BusRepArray(NUM_UDP_SUBS_C - 1 downto 0);
+         signal busSubReq      : Udp2BusReqArray(NUM_BUS_SUBS_C - 1 downto 0) := (others => UDP2BUSREQ_INIT_C);
+         signal busSubRep      : Udp2BusRepArray(NUM_BUS_SUBS_C - 1 downto 0) := (others => UDP2BUSREP_INIT_C);
+
+         signal busMstReq      : Udp2BusReqArray(NUM_BUS_MSTS_C - 1 downto 0) := (others => UDP2BUSREQ_INIT_C);
+         signal busMstRep      : Udp2BusRepArray(NUM_BUS_MSTS_C - 1 downto 0) := (others => UDP2BUSREP_INIT_C);
+
+         signal hbiMstReq      : Lan9254ReqArray(HBI_MSTS_LDX_C downto HBI_MSTS_RDX_C) := (others => LAN9254REQ_INIT_C);
+         signal hbiMstRep      : Lan9254RepArray(HBI_MSTS_LDX_C downto HBI_MSTS_RDX_C) := (others => LAN9254REP_INIT_C);
 
          signal timingMGTSt    : std_logic_vector(31 downto 0) := (others => '0');
 
          signal usr_evts_adj   : std_logic_vector(3 downto 0);
+         signal evrTimestampHi : std_logic_vector(31 downto 0) := (others => '0');
+         signal evrTimestampLo : std_logic_vector(31 downto 0) := (others => '0');
+         signal eventCode      : std_logic_vector( 7 downto 0) := (others => '0');
+         signal eventCodeVld   : std_logic                     := '0';
 
       begin
 
@@ -1521,8 +1540,13 @@ begin
 
          U_ESC : entity work.Lan9254ESCWrapper
             generic map (
-               CLOCK_FREQ_G   => CLK_FREQ_C,
-               NUM_UDP_SUBS_G => NUM_UDP_SUBS_C
+               CLOCK_FREQ_G          => CLK_FREQ_C,
+               NUM_BUS_SUBS_G        => NUM_BUS_SUBS_C,
+               NUM_BUS_MSTS_G        => NUM_BUS_MSTS_C,
+               NUM_EXT_HBI_MASTERS_G => NUM_HBI_MSTS_C,
+               EXT_HBI_MASTERS_PRI_G => PRI_HBI_MSTS_C,
+               -- our EvrTxPDO talks to the HBI directly
+               DISABLE_TXPDO_G       => true
             )
             port map (
                clk          => sysClk,
@@ -1534,11 +1558,17 @@ begin
                req          => escHbiReq,
                rep          => escHbiRep,
 
-               udp2BusReq   => udp2BusReq,
-               udp2BusRep   => udp2BusRep,
+               extHBIReq    => hbiMstReq,
+               extHBIRep    => hbiMstRep,
 
-               txPDOMst     => txPDOMst,
-               txPDORdy     => txPDORdy,
+               busMstReq    => busMstReq,
+               busMstRep    => busMstRep,
+
+               busSubReq    => busSubReq,
+               busSubRep    => busSubRep,
+
+               txPDOMst     => open,
+               txPDORdy     => open,
 
                rxPDOMst     => rxPDOMst,
                rxPDORdy     => rxPDORdy,
@@ -1559,13 +1589,18 @@ begin
                bus_CLK           => sysClk,
                bus_RESET         => sysRst,
 
-               bus_Req           => udp2BusReq(UDP_IDX_EVR_C),
-               bus_Rep           => udp2BusRep(UDP_IDX_EVR_C),
+               bus_Req           => busSubReq(BUS_SIDX_EVR_C),
+               bus_Rep           => busSubRep(BUS_SIDX_EVR_C),
 
                clk_evr           => timingRecClk,
                rst_evr           => timingRecRst,
 
                usr_events_adj_o  => usr_evts_adj,
+
+               event_o           => eventCode,
+               event_vld_o       => eventCodeVld,
+               timestamp_hi_o    => evrTimestampHi,
+               timestamp_lo_o    => evrTimestampLo,
 
                evr_rx_data       => timingRx.data,
                evr_rx_charisk    => timingRx.dataK,
@@ -1574,6 +1609,42 @@ begin
 
          ec_LATCH_o(0) <= usr_evts_adj(0);
          ec_LATCH_t(0) <= '0'; -- out
+
+         U_TXPDO : entity work.EvrTxPDO
+            generic map (
+               NUM_EVENT_DWORDS_G => 0,
+               EVENT_MAP_G        => EVENT_MAP_IDENT_C,
+               MEM_BASE_ADDR_G    => EVR_BASE_ADDR_C,
+               MEM_XFERS_G        => MEM_XFER_NULL_C,
+               TXPDO_ADDR_G       => unsigned(ESC_SM3_SMA_C)
+            )
+            port map (
+               evrClk             => timingRecClk,
+               evrRst             => timingRecRst,
+
+               pdoTrg             => usr_evts_adj(1),
+               tsHi               => evrTimestampHi,
+               tsLo               => evrTimestampLo,
+               eventCode          => eventCode,
+               eventCodeVld       => eventCodeVld,
+               eventMapClr        => x"FF",
+
+               busClk             => sysClk,
+               busRst             => sysRst,
+
+               hasTs              => '1',
+               hasEventCodes      => '0',
+               hasLatch0P         => '0',
+               hasLatch0N         => '0',
+               hasLatch1P         => '0',
+               hasLatch1N         => '0',
+
+               lanReq             => hbiMstReq(HBI_MIDX_PDO_C),
+               lanRep             => hbiMstRep(HBI_MIDX_PDO_C),
+
+               busReq             => busMstReq(BUS_MIDX_PDO_C),
+               busRep             => busMstRep(BUS_MIDX_PDO_C)
+            );
 
          timingMGTSt <= (
              0     => timingIb.pllLocked,
@@ -1587,8 +1658,6 @@ begin
              21    => timingRx.dspErr(1),
             others => '0'
          );
-
-         txPDOMst.valid   <= '1';
 
          U_DIAG_REGS : entity work.AxiLiteRegs
             generic map (
@@ -1613,24 +1682,6 @@ begin
                diagRegsR(i)(escStats(i)'range) <= std_logic_vector(escStats(i));
             end loop;
          end process P_DIAG_ASSIGN;
-
-         P_TXPDO : process ( sysClk ) is
-         begin
-            if ( rising_edge(sysClk ) ) then
-               txPDOMst.ben  <= "11";
-               txPDOMst.data <= x"CAFE";
-               if ( txPDORdy = '1' ) then
-                  if ( SM3_WADDR_END_C = txPDOMst.wrdAddr ) then
-                     txPDOMst.wrdAddr <= (others => '0');
-                     if ( ESC_SM3_LEN_C(0) = '1' ) then
-                        txPDOMst.ben(1) <= '0';
-                     end if;
-                  else
-                     txPDOMst.wrdAddr <= txPDOMst.wrdAddr + 1;
-                  end if;
-               end if;
-            end if;
-         end process P_TXPDO;
 
          rxPDORdy         <= '1';
 
