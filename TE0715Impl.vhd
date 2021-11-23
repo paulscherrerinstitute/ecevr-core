@@ -1161,7 +1161,16 @@ begin
       signal hbiRst        : std_logic := '0';
 
       signal testFailed    : std_logic_vector(4 downto 0) := (others => '0');
-   begin
+
+      signal eeprom_sda_i   : std_logic;
+      signal eeprom_sda_o   : std_logic := '1';
+      signal eeprom_sda_t   : std_logic := '1';
+
+      signal eeprom_scl_i   : std_logic;
+      signal eeprom_scl_o   : std_logic := '1';
+      signal eeprom_scl_t   : std_logic := '1';
+
+begin
 
       assert NUM_LAN_GPI_C + NUM_LAN_GPO_C = NUM_LAN_GPIO_C severity failure;
 
@@ -1326,14 +1335,6 @@ begin
          signal evrTimestampLo : std_logic_vector(31 downto 0) := (others => '0');
          signal eventCode      : std_logic_vector( 7 downto 0) := (others => '0');
          signal eventCodeVld   : std_logic                     := '0';
-
-         signal eeprom_sda_i   : std_logic;
-         signal eeprom_sda_o   : std_logic                     := '1';
-         signal eeprom_sda_t   : std_logic                     := '1';
-
-         signal eeprom_scl_i   : std_logic;
-         signal eeprom_scl_o   : std_logic                     := '1';
-         signal eeprom_scl_t   : std_logic                     := '1';
 
       begin
 
