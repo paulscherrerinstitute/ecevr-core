@@ -1778,9 +1778,9 @@ begin
       B13_L3_N  <= led( 9);
       B13_L5_N  <= led(10);
 
-      B13_L18_P    <= '1' when eeprom_sda_t = '1' else eeprom_sda_o;
+      B13_L18_P    <= 'Z' when eeprom_sda_t = '1' else eeprom_sda_o;
       eeprom_sda_i <= B13_L18_P;
-      B13_L18_N    <= '1' when eeprom_scl_t = '1' else eeprom_scl_o;
+      B13_L18_N    <= 'Z' when eeprom_scl_t = '1' else eeprom_scl_o;
       eeprom_scl_i <= B13_L18_N;
 
       -- ylo led in PS-ethernet connector
