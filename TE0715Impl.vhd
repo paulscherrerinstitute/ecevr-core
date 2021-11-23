@@ -1327,6 +1327,14 @@ begin
          signal eventCode      : std_logic_vector( 7 downto 0) := (others => '0');
          signal eventCodeVld   : std_logic                     := '0';
 
+         signal eeprom_sda_i   : std_logic;
+         signal eeprom_sda_o   : std_logic                     := '1';
+         signal eeprom_sda_t   : std_logic                     := '1';
+
+         signal eeprom_scl_i   : std_logic;
+         signal eeprom_scl_o   : std_logic                     := '1';
+         signal eeprom_scl_t   : std_logic                     := '1';
+
       begin
 
          P_SPI_MUX : process (
@@ -1763,11 +1771,16 @@ begin
       B13_L20_N <= led( 3);
       B13_L21_P <= led( 4);
       B13_L21_N <= led( 5);
-      B13_L18_N <= led( 6);
-      B13_L18_P <= led( 7);
+      -- blue-wired to EEPROM I2C-SCL B13_L18_N <= led( 6);
+      -- blue-wired to EEPROM I2C-SDA B13_L18_P <= led( 7);
       B13_L3_P  <= led( 8);
       B13_L3_N  <= led( 9);
       B13_L5_N  <= led(10);
+
+      B13_L18_P    <= '1' when eeprom_sda_t = '1' else eeprom_sda_o;
+      eeprom_sda_i <= B13_L18_P;
+      B13_L18_N    <= '1' when eeprom_scl_t = '1' else eeprom_scl_o;
+      eeprom_scl_i <= B13_L18_N;
 
       -- ylo led in PS-ethernet connector
       led(8)          <= not timingTxStat.resetDone;
