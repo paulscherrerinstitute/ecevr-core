@@ -12,7 +12,7 @@ entity EvrTxPDO is
       NUM_EVENT_DWORDS_G  : natural range 0 to 8  := 8;
       EVENT_MAP_G         : EventMapArray         := EVENT_MAP_IDENT_C;
       MEM_BASE_ADDR_G     : unsigned(31 downto 0) := (others => '0');
-      MEM_XFERS_G         : MemXferArray          := MEM_XFER_NULL_C;
+      MAX_MEM_XFERS_G     : natural               := 0;
       TXPDO_ADDR_G        : unsigned(15 downto 0)
    );
    port (
@@ -36,6 +36,9 @@ entity EvrTxPDO is
       hasLatch0N          : in  std_logic := '1';
       hasLatch1P          : in  std_logic := '1';
       hasLatch1N          : in  std_logic := '1';
+
+      dbufMap             : in  MemXferArray(MAX_MEM_XFERS_G - 1 downto 0) := (others => MEM_XFER_INIT_C);
+      numMaps             : in  natural range 0 to MAX_MEM_XFERS_G         := 0;
 
       -- LAN9254 HBI bus master IF
       lanReq              : out Lan9254ReqType;
@@ -83,18 +86,6 @@ architecture rtl of EvrTxPDO is
       end if;
    end procedure mapEvent;
 
-   function MEM_XFERS_F return MemXferArray is
-      constant MEM_XFER_DUMMY_C : MemXferArray(0 downto 0) := ( 0 => MEM_XFER_INIT_C );
-   begin
-      if ( MEM_XFERS_G'length > 0 ) then
-         return MEM_XFERS_G;
-      else
-         return MEM_XFER_DUMMY_C;
-      end if;
-   end function MEM_XFERS_F;
-
-   constant MEM_XFERS_C : MemXferArray:= MEM_XFERS_F;
-
    type BusStateType is ( IDLE, X_TS, X_EV, X_DC_LATCH, READ_LAN, X_MEM, READ_MEM, WRITE_PDO );
 
    type BusRegType is record
@@ -105,7 +96,7 @@ architecture rtl of EvrTxPDO is
       pdoDwAddr           : unsigned(11 downto 0);
       pdoTrg              : std_logic;
       count               : unsigned(3 downto 0);
-      xferIdx             : natural range 0 to MEM_XFERS_C'length;
+      xferIdx             : natural range 0 to MAX_MEM_XFERS_G;
    end record BusRegType;
 
    constant COUNT_ZERO_C  : unsigned(3 downto 0) := (others => '0');
@@ -252,7 +243,8 @@ begin
                           busRep, lanRep,
                           hasTs, tsArray,
                           hasEventCodes, ecArray,
-                          hasLatch ) is
+                          hasLatch,
+                          dbufMap, numMaps ) is
       variable v : BusRegType;
    begin
       v := rBus;
@@ -326,16 +318,23 @@ begin
             end if;
 
          when X_MEM =>
-            if ( rBus.xferIdx < MEM_XFERS_G'length ) then
-               if ( rBus.count = 0 ) then
-                  setDWAddr( v.busReq.dwaddr, MEM_BASE_ADDR_G, MEM_XFERS_C(rBus.xferIdx).off );
-               else
-                  v.busReq.dwAddr := std_logic_vector( unsigned(rBus.busReq.dwAddr) + 1 );
-               end if;
+            if ( rBus.xferIdx < numMaps ) then
                v.busReq.be    := (others => '1');
                v.busReq.rdnwr := '1';
                v.busReq.valid := '1';
                v.state        := READ_MEM;
+               if ( rBus.count = 0 ) then
+                  if ( dbufMap( rBus.xferIdx ).num = 0 ) then
+                     -- skip empty entry
+                     v.xferIdx      := rBus.xferIdx + 1;
+                     v.state        := X_MEM;
+                     v.busReq.valid := '0';
+                  else
+                     setDWAddr( v.busReq.dwaddr, MEM_BASE_ADDR_G, dbufMap(rBus.xferIdx).off );
+                  end if;
+               else
+                  v.busReq.dwAddr := std_logic_vector( unsigned(rBus.busReq.dwAddr) + 1 );
+               end if;
             else
                v.state := IDLE;
             end if;
@@ -347,8 +346,8 @@ begin
                v.busReq.valid := '0';
                v.state        := WRITE_PDO;
                v.count        := rBus.count + 1;
-               write32( v.lanReq, lanRep, rBus.pdoDwAddr, swap32( MEM_XFERS_C(rBus.xferIdx).swp, busRep.rdata ) );
-               if ( rBus.count = MEM_XFERS_C( rBus.xferIdx ).num - 1 ) then
+               write32( v.lanReq, lanRep, rBus.pdoDwAddr, swap32( dbufMap(rBus.xferIdx).swp, busRep.rdata ) );
+               if ( rBus.count = dbufMap( rBus.xferIdx ).num - 1 ) then
                   v.count   := COUNT_ZERO_C;
                   v.xferIdx := rBus.xferIdx + 1;
                end if;
