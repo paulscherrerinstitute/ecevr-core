@@ -55,6 +55,7 @@ use work.Lan9254ESCPkg.all;
 use work.MicroUDPPkg.all;
 use work.Udp2BusPkg.all;
 use work.EvrTxPDOPkg.all;
+use work.EEPROMConfigPkg.all;
 
 library unisim;
 use unisim.vcomponents.all;
@@ -1094,31 +1095,33 @@ begin
    GEN_IOMAP_ECEVR : if ( ECEVR_C ) generate
 
       -- board-level GPIO
-      constant NUM_BRD_GPIO_C : natural := 2;
+      constant NUM_BRD_GPIO_C           : natural := 2;
 
-      constant NUM_LAN_GPIO_C : natural := 16;
+      constant NUM_LAN_GPIO_C           : natural := 16;
 
-      constant NUM_LAN_GPI_C  : natural := 8;
-      constant NUM_LAN_GPO_C  : natural := 8;
+      constant NUM_LAN_GPI_C            : natural := 8;
+      constant NUM_LAN_GPO_C            : natural := 8;
 
-      constant NUM_BUS_MSTS_C : natural := 1;
-      constant BUS_MIDX_PDO_C : natural := 0;
+      constant NUM_BUS_MSTS_C           : natural := 1;
+      constant BUS_MIDX_PDO_C           : natural := 0;
 
-      constant EVR_BASE_ADDR_C: unsigned(31 downto 0) := x"0000_0000";
+      constant EVR_BASE_ADDR_C          : unsigned(31 downto 0) := x"0000_0000";
 
-      constant NUM_BUS_SUBS_C : natural := 1;
-      constant BUS_SIDX_EVR_C : natural := 0;
+      constant NUM_BUS_SUBS_C           : natural := 1;
+      constant BUS_SIDX_EVR_C           : natural := 0;
 
-      constant NUM_HBI_MSTS_C : natural := 1;
-      constant PRI_HBI_MSTS_C : integer := -1;
-      constant HBI_MIDX_PDO_C : integer := PRI_HBI_MSTS_C;
-      constant HBI_MSTS_LDX_C : integer := PRI_HBI_MSTS_C;
-      constant HBI_MSTS_RDX_C : integer := HBI_MSTS_LDX_C + NUM_HBI_MSTS_C - 1;
+      constant NUM_HBI_MSTS_C           : natural := 1;
+      constant PRI_HBI_MSTS_C           : integer := -1;
+      constant HBI_MIDX_PDO_C           : integer := PRI_HBI_MSTS_C;
+      constant HBI_MSTS_LDX_C           : integer := PRI_HBI_MSTS_C;
+      constant HBI_MSTS_RDX_C           : integer := HBI_MSTS_LDX_C + NUM_HBI_MSTS_C - 1;
 
-      constant LATCH0_MAP_C   : natural := ite( (PRJ_VARIANT_G = "ecevr-dio"), 0, 42 );
-      constant LATCH1_MAP_C   : natural := ite( (PRJ_VARIANT_G = "ecevr-dio"), 38, 43 );
+      constant MAX_TXPDO_SEGMENTS_C     : natural := 16;
 
-      type     IntArray      is array (integer range <>) of integer;
+      constant LATCH0_MAP_C             : natural := ite( (PRJ_VARIANT_G = "ecevr-dio"), 0, 42 );
+      constant LATCH1_MAP_C             : natural := ite( (PRJ_VARIANT_G = "ecevr-dio"), 38, 43 );
+
+      type     IntArray                 is array (integer range <>) of integer;
 
       -- map GPIO numbers to index in 'fpga' array
       constant lan9254_gpio_map : IntArray(NUM_LAN_GPIO_C - 1 downto 0) := (
@@ -1169,6 +1172,11 @@ begin
       signal eeprom_scl_i   : std_logic;
       signal eeprom_scl_o   : std_logic := '1';
       signal eeprom_scl_t   : std_logic := '1';
+
+      signal configReq      : EEPROMConfigReqType;
+      signal configAck      : EEPROMConfigAckType := EEPROM_CONFIG_ACK_ASSERT_C;
+      signal dbufSegments   : MemXferArray(MAX_TXPDO_SEGMENTS_C - 1 downto 0);
+      signal configAttempts : unsigned(3 downto 0);
 
 begin
 
@@ -1567,6 +1575,12 @@ begin
                req          => escHbiReq,
                rep          => escHbiRep,
 
+               myAddr       => configReq.net,
+               myAddrAck    => configAck.net,
+
+               escConfigReq => configReq.esc,
+               escConfigAck => configAck.esc,
+
                extHBIReq    => hbiMstReq,
                extHBIRep    => hbiMstRep,
 
@@ -1621,10 +1635,10 @@ begin
 
          U_TXPDO : entity work.EvrTxPDO
             generic map (
-               NUM_EVENT_DWORDS_G => 0,
+               NUM_EVENT_DWORDS_G => 8,
                EVENT_MAP_G        => EVENT_MAP_IDENT_C,
                MEM_BASE_ADDR_G    => EVR_BASE_ADDR_C,
-               MEM_XFERS_G        => MEM_XFER_NULL_C,
+               MAX_MEM_XFERS_G    => MAX_TXPDO_SEGMENTS_C,
                TXPDO_ADDR_G       => unsigned(ESC_SM3_SMA_C)
             )
             port map (
@@ -1641,18 +1655,38 @@ begin
                busClk             => sysClk,
                busRst             => sysRst,
 
-               hasTs              => '1',
-               hasEventCodes      => '0',
-               hasLatch0P         => '0',
-               hasLatch0N         => '0',
-               hasLatch1P         => '0',
-               hasLatch1N         => '0',
+               dbufMaps           => dbufSegments,
+               config             => configReq.txPDO,
 
                lanReq             => hbiMstReq(HBI_MIDX_PDO_C),
                lanRep             => hbiMstRep(HBI_MIDX_PDO_C),
 
                busReq             => busMstReq(BUS_MIDX_PDO_C),
                busRep             => busMstRep(BUS_MIDX_PDO_C)
+            );
+
+         U_EEP_CFG : entity work.EEPROMConfigurator
+            generic map (
+               CLOCK_FREQ_G       => CLK_FREQ_C,
+               MAX_TXPDO_MAPS_G   => MAX_TXPDO_SEGMENTS_C
+            )
+            port map (
+               clk                => sysClk,
+               rst                => sysRst,
+
+               configReq          => configReq,
+               configAck          => configAck,
+               dbufMaps           => dbufSegments,
+
+               i2cSclInp          => eeprom_scl_i,
+               i2cSclOut          => eeprom_scl_o,
+               i2cSclHiZ          => eeprom_scl_t,
+
+               i2cSdaInp          => eeprom_sda_i,
+               i2cSdaOut          => eeprom_sda_o,
+               i2cSdaHiZ          => eeprom_sda_t,
+
+               attempts           => configAttempts
             );
 
          timingMGTSt <= (
