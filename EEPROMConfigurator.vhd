@@ -240,7 +240,9 @@ begin
             v.lwcnt     := r.wcnt;
             v.lwrp      := r.wrp;
             v.lnMaps    := r.nMaps;
-            v.attempt   := r.attempt + 1;
+            if ( r.attempt /= unsigned(to_signed(-1, r.attempt'length)) ) then
+               v.attempt   := r.attempt + 1;
+            end if;
             -- while processing categories we assume nothing bad happens if we read
             -- a few words ahead (assume eeprom 'wraps' around if we hit the 0xffff
             -- end marker if that happens to be at the very end of the PROM)...
