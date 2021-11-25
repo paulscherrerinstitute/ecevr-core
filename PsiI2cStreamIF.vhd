@@ -158,9 +158,11 @@ begin
 
    arbErrorLoc <= toSl( r.arbCount = 0 );
 
-   P_COMB : process ( r, rsp, i2cCmdRdy, strmMstIb, strmRdyOb ) is
-      variable v : RegType := r;
+   P_COMB : process ( r, rsp, i2cCmdRdy, strmMstIb, strmRdyOb, arbErrorLoc ) is
+      variable v : RegType;
    begin
+
+      v := r;
 
       C_STATE : case ( r.state ) is
          when IDLE =>
