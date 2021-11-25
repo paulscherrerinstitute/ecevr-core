@@ -12,7 +12,7 @@ entity EvrTxPDO is
       NUM_EVENT_DWORDS_G  : natural range 0 to 8  := 8;
       EVENT_MAP_G         : EventMapArray         := EVENT_MAP_IDENT_C;
       MEM_BASE_ADDR_G     : unsigned(31 downto 0) := (others => '0');
-      MAX_MEM_XFERS_G     : natural               := 0;
+      MAX_MEM_XFERS_G     : MemXferNumType        := 0;
       TXPDO_ADDR_G        : unsigned(15 downto 0)
    );
    port (
@@ -30,15 +30,10 @@ entity EvrTxPDO is
       busClk              : in  std_logic;
       busRst              : in  std_logic;
 
-      hasTs               : in  std_logic := '1';
-      hasEventCodes       : in  std_logic := '1';
-      hasLatch0P          : in  std_logic := '1';
-      hasLatch0N          : in  std_logic := '1';
-      hasLatch1P          : in  std_logic := '1';
-      hasLatch1N          : in  std_logic := '1';
-
-      dbufMap             : in  MemXferArray(MAX_MEM_XFERS_G - 1 downto 0) := (others => MEM_XFER_INIT_C);
-      numMaps             : in  natural range 0 to MAX_MEM_XFERS_G         := 0;
+      -- dbufMaps should be part of 'config' but cannot since it is
+      -- an unconstrained array.
+      dbufMaps            : in  MemXferArray(MAX_MEM_XFERS_G - 1 downto 0) := (others => MEM_XFER_INIT_C);
+      config              : in  EvrTxPDOConfigType := EVR_TXPDO_CONFIG_INIT_C; 
 
       -- LAN9254 HBI bus master IF
       lanReq              : out Lan9254ReqType;
@@ -130,17 +125,17 @@ architecture rtl of EvrTxPDO is
    end function DCLatchAddr;
 
    function swap32(
-      constant s : in  natural range 0 to 4;
+      constant s : in  SwapType;
       constant v : in  std_logic_vector
    ) return std_logic_vector is
       variable r : std_logic_vector(v'range);
    begin
       case ( s ) is
-         when 2 =>
+         when SWP16 =>
             for i in 0 to v'length/16 - 1 loop
                r(15 + 16*i downto 16*i) := v( 7 + 16*i downto 16*i) & v(15 + 16*i downto 8 + 16*i);
             end loop;
-         when 4 =>
+         when SWP32 =>
             for i in 0 to v'length/32 - 1 loop
                r(31 + 32*i downto 32*i) :=    v( 7 + 32*i downto  0 + 32*i) & v(15 + 32*i downto  8 + 32*i) 
                                            &  v(23 + 32*i downto 16 + 32*i) & v(31 + 32*i downto 24 + 32*i) ;
@@ -190,7 +185,7 @@ begin
    assert EVENT_MAP_G'length = 0 or EVENT_MAP_G'length = 256 report "EVENT_MAP_G must have 0 or 256 elements" severity failure;
 
    tsArray    <= ( 0 => rEvr.tsHi,  1 => rEvr.tsLo );
-   hasLatch   <= ( 0 => hasLatch0P, 1 => hasLatch0N, 2 => hasLatch1P, 3 => hasLatch1N );
+   hasLatch   <= ( 0 => config.hasLatch0P, 1 => config.hasLatch0N, 2 => config.hasLatch1P, 3 => config.hasLatch1N );
 
    GEN_EC_MAP : for i in ecArray'range generate
       ecArray(i) <= rEvr.eventCodesLst( 31 + 32 * i downto 32 * i );
@@ -241,10 +236,10 @@ begin
    P_BUS_COMB : process ( rBus,
                           pdoTrgBus,
                           busRep, lanRep,
-                          hasTs, tsArray,
-                          hasEventCodes, ecArray,
+                          tsArray,
+                          ecArray,
                           hasLatch,
-                          dbufMap, numMaps ) is
+                          dbufMaps, config ) is
       variable v : BusRegType;
    begin
       v := rBus;
@@ -262,7 +257,7 @@ begin
             end if;
 
          when X_TS =>
-            if ( hasTs /= '0' ) then
+            if ( config.hasTs /= '0' ) then
                v.state  := WRITE_PDO;
                v.count  := rBus.count + 1;
                write32( v.lanReq, lanRep, rBus.pdoDwAddr, tsArray( to_integer( rBus.count ) ) );
@@ -277,7 +272,7 @@ begin
             end if;
 
          when X_EV =>
-            if ( ( NUM_EVENT_DWORDS_G > 0 ) and ( hasEventCodes /= '0' ) ) then
+            if ( ( NUM_EVENT_DWORDS_G > 0 ) and ( config.hasEventCodes /= '0' ) ) then
                v.state  := WRITE_PDO;
                v.count  := rBus.count + 1;
                write32( v.lanReq, lanRep, rBus.pdoDwAddr, ecArray( to_integer( rBus.count ) ) );
@@ -318,19 +313,19 @@ begin
             end if;
 
          when X_MEM =>
-            if ( rBus.xferIdx < numMaps ) then
+            if ( rBus.xferIdx < config.numMaps ) then
                v.busReq.be    := (others => '1');
                v.busReq.rdnwr := '1';
                v.busReq.valid := '1';
                v.state        := READ_MEM;
                if ( rBus.count = 0 ) then
-                  if ( dbufMap( rBus.xferIdx ).num = 0 ) then
+                  if ( dbufMaps( rBus.xferIdx ).num = 0 ) then
                      -- skip empty entry
                      v.xferIdx      := rBus.xferIdx + 1;
                      v.state        := X_MEM;
                      v.busReq.valid := '0';
                   else
-                     setDWAddr( v.busReq.dwaddr, MEM_BASE_ADDR_G, dbufMap(rBus.xferIdx).off );
+                     setDWAddr( v.busReq.dwaddr, MEM_BASE_ADDR_G, dbufMaps(rBus.xferIdx).off );
                   end if;
                else
                   v.busReq.dwAddr := std_logic_vector( unsigned(rBus.busReq.dwAddr) + 1 );
@@ -346,8 +341,8 @@ begin
                v.busReq.valid := '0';
                v.state        := WRITE_PDO;
                v.count        := rBus.count + 1;
-               write32( v.lanReq, lanRep, rBus.pdoDwAddr, swap32( dbufMap(rBus.xferIdx).swp, busRep.rdata ) );
-               if ( rBus.count = dbufMap( rBus.xferIdx ).num - 1 ) then
+               write32( v.lanReq, lanRep, rBus.pdoDwAddr, swap32( dbufMaps(rBus.xferIdx).swp, busRep.rdata ) );
+               if ( rBus.count = dbufMaps( rBus.xferIdx ).num - 1 ) then
                   v.count   := COUNT_ZERO_C;
                   v.xferIdx := rBus.xferIdx + 1;
                end if;
