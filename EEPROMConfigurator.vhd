@@ -10,7 +10,7 @@ use work.EvrTxPDOPkg.all;
 use work.EEPROMConfigPkg.all;
 
 entity EEPROMConfigurator is
-   generic ( 
+   generic (
       CLOCK_FREQ_G       : real;               --Hz; at least 12*i2c freq
       I2C_FREQ_G         : real    := 100.0E3; --Hz
       I2C_BUSY_TIMEOUT_G : real    := 0.1;     -- sec
@@ -38,7 +38,9 @@ entity EEPROMConfigurator is
       i2cSdaOut          : out std_logic;
       i2cSdaHiZ          : out std_logic;
 
-      attempts           : out unsigned(3 downto 0)
+      retries            : out unsigned(3 downto 0);
+
+      debug              : out std_logic_vector(31 downto 0)
    );
 end entity EEPROMConfigurator;
 
@@ -54,7 +56,7 @@ architecture rtl of EEPROMConfigurator is
 
    -- maximum length of a single transfer operation by PsiI2cStrmIF
    constant MAX_CHUNK_C           : natural       := 128;
-   constant ADDR_2B_C             : boolean       := (EEPROM_SIZE_G > 2048);
+   constant ADDR_2B_C             : boolean       := (EEPROM_SIZE_G > 16384);
 
    constant I2C_RD_C              : std_logic     := '1';
    constant I2C_WR_C              : std_logic     := '0';
@@ -63,20 +65,32 @@ architecture rtl of EEPROMConfigurator is
    constant GEN_STOP_C            : std_logic     := '0';
 
    constant CAT_DEV_ME_C          : std_logic_vector(15 downto 0) := x"0001";
-   constant CAT_SM2_C             : std_logic_vector(15 downto 0) := x"0051";
-   constant CAT_SM3_C             : std_logic_vector(15 downto 0) := x"0050";
+   constant CAT_SM_C              : std_logic_vector(15 downto 0) := x"0029";
    constant CAT_END_C             : std_logic_vector(15 downto 0) := x"FFFF";
-   constant CAT_OFF_C             : natural                       := 16#40#;
+   constant CAT_OFF_C             : natural                       := 16#80#;
    constant CAT_HDR_L_C           : natural                       := 4;
-   constant CAT_SM_HDR_L_C        : natural                       := CAT_HDR_L_C + 4;
+   constant SM3_LEN_OFF_C         : natural                       := 8*3 + 2;
+   constant SM2_LEN_OFF_C         : natural                       := 8*2 + 2;
+   constant SM_LEN_LEN_C          : natural                       := 2;
 
    function i2cHeader(
       op         : std_logic;
-      count      : unsigned(6 downto 0) := (others => '0'); -- desired count - 1
-      noStop     : std_logic := GEN_STOP_C
+      count      : unsigned(6 downto 0)          := (others => '0'); -- desired count - 1
+      noStop     : std_logic                     := GEN_STOP_C;
+      addr       : unsigned        (15 downto 0) := (others => '0')
    )  return std_logic_vector is
+      variable a : std_logic_vector( 6 downto 0) := I2C_ADDR_G;
    begin
-      return noStop & std_logic_vector(count) & I2C_ADDR_G & op;
+      if ( ( EEPROM_SIZE_G > 2048 ) and ( op = I2C_WR_C ) ) then
+         if    ( EEPROM_SIZE_G <= 4096 ) then
+            a(0 downto 0) := std_logic_vector( addr( 8 downto 8) );
+         elsif ( EEPROM_SIZE_G <= 8192 ) then
+            a(1 downto 0) := std_logic_vector( addr( 9 downto 8) );
+         elsif ( EEPROM_SIZE_G <= 16384 ) then
+            a(2 downto 0) := std_logic_vector( addr(10 downto 8) );
+         end if;
+      end if;
+      return noStop & std_logic_vector(count) & a & op;
    end function i2cHeader;
 
    type StateType is (START, ADDR, ADDR_RESP, READ, RCV, STORE_UPPER, DRAIN, CHECK, DONE);
@@ -86,6 +100,7 @@ architecture rtl of EEPROMConfigurator is
       retState  : StateType;
       strmTxMst : Lan9254StrmMstType;
       smCfg     : ESCConfigReqType;
+      smCfg32   : std_logic_vector(1 downto 0);
       eepAddr   : unsigned(15 downto 0);
       cfgAddr   : unsigned(15 downto 0);
       eepNext   : unsigned(15 downto 0);
@@ -110,7 +125,7 @@ architecture rtl of EEPROMConfigurator is
       lnMaps    : natural range 0 to MAX_TXPDO_MAPS_G;
       catDone   : boolean;
       cfgFound  : boolean;
-      attempt   : unsigned( 3 downto 0);
+      retries   : unsigned( 3 downto 0);
    end record RegType;
 
    constant REG_INIT_C : RegType := (
@@ -118,6 +133,7 @@ architecture rtl of EEPROMConfigurator is
       retState  => START,
       strmTxMst => LAN9254STRM_MST_INIT_C,
       smCfg     => ESC_CONFIG_REQ_NULL_C,
+      smCfg32   => "00",
       eepAddr   => to_unsigned( CAT_OFF_C      , 16),
       cfgAddr   => to_unsigned( EEPROM_OFFSET_G, 16),
       eepNext   => to_unsigned( 0              , 16),
@@ -129,7 +145,7 @@ architecture rtl of EEPROMConfigurator is
       lwrp      =>  0,
       wcnt      =>  0,
       lwcnt     =>  0,
-      eepEnd    => CAT_SM_HDR_L_C - 1,
+      eepEnd    => CAT_HDR_L_C - 1,
       cfgEnd    => PROM_LEN_C  - 1,
       allOnes   => '0',
       allZeros  => '0',
@@ -142,7 +158,7 @@ architecture rtl of EEPROMConfigurator is
       lnMaps    => 0,
       catDone   => (EEPROM_OFFSET_G /= 0),
       cfgFound  => false,
-      attempt   => (others => '0')
+      retries   => (others => '0')
    );
 
    procedure storeByte(
@@ -194,7 +210,7 @@ architecture rtl of EEPROMConfigurator is
 
 begin
 
-   assert EEPROM_OFFSET_G + PROM_LEN_C <= EEPROM_SIZE_G / 8 
+   assert EEPROM_OFFSET_G + PROM_LEN_C <= EEPROM_SIZE_G / 8
       report "EEPROM too small" severity failure;
 
    P_MAP  : process ( r ) is
@@ -240,9 +256,6 @@ begin
             v.lwcnt     := r.wcnt;
             v.lwrp      := r.wrp;
             v.lnMaps    := r.nMaps;
-            if ( r.attempt /= unsigned(to_signed(-1, r.attempt'length)) ) then
-               v.attempt   := r.attempt + 1;
-            end if;
             -- while processing categories we assume nothing bad happens if we read
             -- a few words ahead (assume eeprom 'wraps' around if we hit the 0xffff
             -- end marker if that happens to be at the very end of the PROM)...
@@ -255,17 +268,33 @@ begin
                end if;
                v.eepNext         := r.eepAddr + v.cnt + 1;
                v.strmTxMst.last  := '0';
-               v.strmTxMst.data  := i2cHeader( I2C_WR_C, noStop => NO_STOP_C );
+               v.strmTxMst.data  := i2cHeader( I2C_WR_C, noStop => NO_STOP_C, addr => r.eepAddr );
                v.strmTxMst.ben   := "11";
                v.strmTxMst.valid := '1';
                v.state           := ADDR;
+            elsif ( r.smCfg32 /= "00" ) then
+               -- store sync manager info
+               v.wcnt := 0;
+               v.wrp  := 0;
+               if ( r.smCfg32(1) = '1' ) then
+                  v.smCfg.sm3Len := r.cfgImg(1) & r.cfgImg(0);
+                  v.smCfg32(1)   := '0';
+                  -- set up to read SM2 length
+                  v.eepAddr      := r.eepAddr - SM_LEN_LEN_C - (SM3_LEN_OFF_C - SM2_LEN_OFF_C);
+               elsif ( r.smCfg32(0) = '1' ) then
+                  v.smCfg.sm2Len := r.cfgImg(1) & r.cfgImg(0);
+                  v.smCfg32(0)   := '0';
+                  -- skip to next category; this category's length is still in cfgImg(3:2)
+                  v.eepAddr      := r.eepAddr - SM_LEN_LEN_C - SM2_LEN_OFF_C
+                                  + shift_left( resize( toU16( r.cfgImg, 2 ) , v.eepAddr'length ), 1 );
+                  v.eepEnd       := CAT_HDR_L_C - 1;
+               end if;
             elsif ( not r.catDone ) then
                -- we now have a category header
                v.wcnt    := 0;
                v.wrp     := 0;
                -- skip to next category
-               v.eepAddr := r.eepAddr - (CAT_SM_HDR_L_C - CAT_HDR_L_C)
-                            + shift_left( resize( toU16( r.cfgImg, 2 ) , v.eepAddr'length ), 1 );
+               v.eepAddr := r.eepAddr + shift_left( resize( toU16( r.cfgImg, 2 ) , v.eepAddr'length ), 1 );
 
                if ( (r.cfgImg(1) & r.cfgImg(0)) = CAT_END_C ) then
                   v.catDone := true;
@@ -283,15 +312,24 @@ begin
                elsif ( ( r.cfgImg(1) & r.cfgImg(0) ) = CAT_DEV_ME_C ) then
                   -- that's us! set the reader up for the 'real' data
                   v.cfgFound := true;
-                  v.cfgAddr  := r.eepAddr - (CAT_SM_HDR_L_C - CAT_HDR_L_C);
+                  v.cfgAddr  := r.eepAddr;
                   v.cfgEnd   := to_integer( shift_left( toU16( r.cfgImg, 2 ), 1 ) ) - 1;
                   if ( v.cfgEnd > PROM_LEN_C - 1 ) then
                      v.cfgEnd := PROM_LEN_C - 1;
                   end if;
-               elsif ( ( r.cfgImg(1) & r.cfgImg(0) ) = CAT_SM2_C ) then
-                  v.smCfg.sm2Len := r.cfgImg(7) & r.cfgImg(6);
-               elsif ( ( r.cfgImg(1) & r.cfgImg(0) ) = CAT_SM3_C ) then
-                  v.smCfg.sm3Len := r.cfgImg(7) & r.cfgImg(6);
+               elsif ( ( r.cfgImg(1) & r.cfgImg(0) ) = CAT_SM_C ) then
+                  -- sync manager
+                  if    ( toU16(r.cfgImg, 2) >= 32/2 ) then
+                     v.smCfg32 := "11";
+                     v.eepAddr := r.eepAddr + SM3_LEN_OFF_C;
+                     v.eepEnd  := SM_LEN_LEN_C - 1;
+                  elsif ( toU16(r.cfgImg, 2) >= 24/2 ) then
+                     v.smCfg32 := "01";
+                     v.eepAddr := r.eepAddr + SM2_LEN_OFF_C;
+                     v.eepEnd  := SM_LEN_LEN_C - 1;
+                  else
+                     -- no SM2 nor SM3 info; skip
+                  end if;
                else
                   -- some other category; skip
                end if;
@@ -350,6 +388,9 @@ begin
                if ( strmRxMst.ben = "00" ) then
                   -- error; retry
                   v.retState           := START;
+                  if ( r.retries /= unsigned(to_signed(-1, r.retries'length)) ) then
+                     v.retries   := r.retries + 1;
+                  end if;
                else
                   v.retState           := READ;
                end if;
@@ -386,6 +427,9 @@ begin
                   v.wrp       := r.lwrp;
                   v.wcnt      := r.lwcnt;
                   v.nMaps     := r.lnMaps;
+                  if ( r.retries /= unsigned(to_signed(-1, r.retries'length)) ) then
+                     v.retries   := r.retries + 1;
+                  end if;
                else
 
                   if ( (strmRxMst.last = '1') or ( r.cnt = 0 ) or ( ( r.cnt = 1 ) and ( strmRxMst.ben = "11" ) )  ) then
@@ -399,7 +443,7 @@ begin
                         -- If r.cnt > 0 we might not have received everything;
                         -- we must adjust the 'next' pointer by the missing amount
                         v.eepAddr   := r.eepNext - r.cnt;
-                        -- however, if r.cnt > 0 and ben = "11" then there is still one element 
+                        -- however, if r.cnt > 0 and ben = "11" then there is still one element
                         -- that we'll process in STORE_UPPER
                         if ( ( r.cnt > 0 ) and ( strmRxMst.ben = "11" ) ) then
                            v.eepAddr := v.eepAddr + 1;
@@ -434,7 +478,7 @@ begin
                v.strmRxRdy := '0';
                v.state     := START;
             end if;
-               
+
       end case;
 
       rin       <= v;
@@ -480,6 +524,9 @@ begin
    dbufMaps  <= r.maps;
    configReq <= configReqLoc;
 
-   attempts  <= r.attempt;
+   retries   <= r.retries;
+
+   debug(31 downto 4) <= (others => '0');
+   debug( 3 downto 0) <= std_logic_vector( to_unsigned( StateType'pos( r.state ), 4 ) );
 
 end architecture rtl;
