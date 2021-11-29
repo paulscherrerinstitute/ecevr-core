@@ -1107,8 +1107,9 @@ begin
 
       constant EVR_BASE_ADDR_C          : unsigned(31 downto 0) := x"0000_0000";
 
-      constant NUM_BUS_SUBS_C           : natural := 1;
+      constant NUM_BUS_SUBS_C           : natural := 2;
       constant BUS_SIDX_EVR_C           : natural := 0;
+      constant BUS_SIDX_LOC_C           : natural := 1;
 
       constant NUM_HBI_MSTS_C           : natural := 1;
       constant PRI_HBI_MSTS_C           : integer := -1;
@@ -1176,7 +1177,11 @@ begin
       signal configReq      : EEPROMConfigReqType;
       signal configAck      : EEPROMConfigAckType := EEPROM_CONFIG_ACK_ASSERT_C;
       signal dbufSegments   : MemXferArray(MAX_TXPDO_SEGMENTS_C - 1 downto 0);
-      signal configAttempts : unsigned(3 downto 0);
+      signal configRetries  : unsigned(3 downto 0);
+      signal configRstR     : std_logic := '0';
+      signal configRstRIn   : std_logic;
+      signal configRst      : std_logic;
+      signal configDebug    : std_logic_vector(31 downto 0);
 
 begin
 
@@ -1672,7 +1677,7 @@ begin
             )
             port map (
                clk                => sysClk,
-               rst                => sysRst,
+               rst                => configRst,
 
                configReq          => configReq,
                configAck          => configAck,
@@ -1686,8 +1691,92 @@ begin
                i2cSdaOut          => eeprom_sda_o,
                i2cSdaHiZ          => eeprom_sda_t,
 
-               attempts           => configAttempts
+               retries            => configRetries
             );
+
+         G_I2C_ILA : if ( false ) generate
+            signal clkdiv : unsigned(5 downto 0) := (others => '0');
+            signal ilaClk : std_logic;
+         begin
+
+            P_DIV : process ( sysClk ) is
+            begin
+               if ( rising_edge( sysClk ) ) then
+                  clkdiv <= clkdiv + 1;
+               end if;
+            end process P_DIV;
+
+            U_BUF : BUFG port map( I => std_logic(clkdiv(4)), O => ilaClk );
+
+            U_ILA : Ila_256
+               port map (
+                  clk        => ilaClk,
+                  probe0(0)  => eeprom_scl_i,
+                  probe0(1)  => eeprom_sda_i,
+                  probe0(2)  => eeprom_scl_o,
+                  probe0(3)  => eeprom_sda_o,
+                  probe0(4)  => eeprom_scl_t,
+                  probe0(5)  => eeprom_sda_t,
+                  probe0(63 downto 6) => (others => '0')
+               );
+         end generate G_I2C_ILA;
+
+         configRst <= sysRst or configRstR;
+
+         P_CFG_SEQ : process ( sysClk ) is
+         begin
+            if ( rising_edge( sysClk ) ) then
+               if ( sysRst = '1' ) then
+                  configRstR <= '0';
+               else
+                  configRstR <= configRstRIn;
+               end if;
+            end if;
+         end process P_CFG_SEQ;
+
+         P_DIAG : process ( busSubReq(BUS_SIDX_LOC_C), dbufSegments, configReq, configRetries, configRstR, configDebug ) is
+            variable a : unsigned( 7 downto 0 );
+            variable v : std_logic_vector(31 downto 0);
+            variable q : Udp2BusReqType;
+         begin
+            q := busSubReq(BUS_SIDX_LOC_C);
+            a := unsigned(q.dwaddr(7 downto 0));
+            v := (others => '0');
+            busSubRep(BUS_SIDX_LOC_C)       <= UDP2BUSREP_INIT_C;
+            busSubRep(BUS_SIDX_LOC_C).valid <= '1';
+            configRstRin                    <= configRstR;
+            case ( to_integer( a ) ) is
+               when 0 => v(0) := configReq.net.macAddrVld;
+                         v(1) := configReq.net.ip4AddrVld;
+                         v(2) := configReq.net.udpPortVld;
+                         v(3) := configReq.esc.valid;
+                         v(15 downto 8) := std_logic_vector( to_unsigned( configReq.txPDO.numMaps, 8 ) );
+                         v(24) := configReq.txPDO.hasTs;
+                         v(25) := configReq.txPDO.hasEventCodes;
+                         v(26) := configReq.txPDO.hasLatch0P;
+                         v(27) := configReq.txPDO.hasLatch0N;
+                         v(28) := configReq.txPDO.hasLatch1P;
+                         v(29) := configReq.txPDO.hasLatch1N;
+                         v(31) := configRstR;
+                         if ( (not q.rdnwr and q.valid and q.be(3)) = '1' ) then
+                            configRstRIn <= q.data(31);
+                         end if;
+
+               when 1 => v    :=           configReq.net.macAddr(31 downto  0);
+               when 2 => v    := x"0000" & configReq.net.macAddr(47 downto 32);
+               when 3 => v    :=           configReq.net.ip4Addr;
+               when 4 => v    := x"0000" & configReq.net.udpPort;
+               when 5 => v    := configReq.esc.sm3Len & configReq.esc.sm2Len;
+               when 6 => v(configRetries'range) := std_logic_vector(configRetries);
+               when 7 => v    := configDebug;
+               when 8 | 9 | 10 | 11 | 12 | 13 | 14 | 15 =>
+                         v    :=   std_logic_vector( to_unsigned( SwapType'pos(dbufSegments(to_integer(a) - 8).swp), 4 ) )
+                                 & "00" & std_logic_vector( dbufSegments(to_integer(a) - 8).num )
+                                 & std_logic_vector( dbufSegments(to_integer(a) - 8).off );
+               when others =>
+            end case;
+            busSubRep(BUS_SIDX_LOC_C).rdata <= v;
+         end process P_DIAG;
 
          timingMGTSt <= (
              0     => timingIb.pllLocked,
