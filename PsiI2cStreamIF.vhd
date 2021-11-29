@@ -5,6 +5,8 @@ use ieee.numeric_std.all;
 use work.ESCBasicTypesPkg.all;
 use work.Lan9254Pkg.all;
 
+use work.IlaWrappersPkg.all;
+
 -- Streaming interface for the PSI i2c master
 -- Note: for the psi master to work the clock frequency must be > 12*I2C_FREQ_G
 
@@ -13,7 +15,8 @@ entity PsiI2cStreamIF is
       CLOCK_FREQ_G    : real;                -- in Hz
       I2C_FREQ_G      : real    := 100.0E3;  -- in Hz
       BUSY_TIMEOUT_G  : real    := 0.1;      -- in sec
-      CMD_TIMEOUT_G   : real    := 100.0e-6  -- in sec     $$ constant=10.0e-6 $$
+      CMD_TIMEOUT_G   : real    := 100.0e-6; -- in sec     $$ constant=10.0e-6 $$
+      GEN_ILA_G       : boolean := false
    );
    port (
       clk             : in  std_logic;
@@ -31,7 +34,7 @@ entity PsiI2cStreamIF is
       -- (i.e., unability to obtain the bus) then a single, empty
       -- beat (last = '1', ben = "00") is returned. Successful writes
       -- return a zero word (ben="11", data=x"0000")
-      strmMstOb     : out Lan9254StrmMstType := LAN9254STRM_MST_INIT_C;
+      strmMstOb       : out Lan9254StrmMstType := LAN9254STRM_MST_INIT_C;
       strmRdyOb       : in  std_logic          := '1';
 
       i2c_scl_i       : in  std_logic          := '1';
@@ -99,7 +102,7 @@ architecture rtl of PsiI2cStreamIF is
       constant typ : in  CmdType;
       constant ack : in  std_logic                    := '0';
       constant dat : in  std_logic_vector(7 downto 0) := x"FF";
-      constant bsy : in  std_logic                    := '0'
+      constant own : in  boolean                      := false
    ) return I2cCmdType is
       variable v : I2cCmdType := (
          vld => '1',
@@ -108,7 +111,7 @@ architecture rtl of PsiI2cStreamIF is
          ack => ack
       );
    begin
-      if ( (typ = I2C_START) and (bsy = '1') ) then
+      if ( (typ = I2C_START) and own ) then
          v.typ := I2C_RESTART;
       end if;
       return v;
@@ -128,6 +131,7 @@ architecture rtl of PsiI2cStreamIF is
       i2cDest     : std_logic_vector( 7 downto 0);
       err         : std_logic;
       arbCount    : unsigned        (11 downto 0);
+      owner       : boolean;
    end record RegType;
 
    constant REG_INIT_C : RegType := (
@@ -141,7 +145,8 @@ architecture rtl of PsiI2cStreamIF is
       xMst        => LAN9254STRM_MST_INIT_C,
       i2cDest     => (others => '0'),
       err         => '0',
-      arbCount    => (others => '1')
+      arbCount    => (others => '1'),
+      owner       => false
    );
 
    signal rsp               : I2cRspType;
@@ -163,6 +168,10 @@ begin
    begin
 
       v := r;
+
+      if ( rsp.busBsy = '0' ) then
+         v.owner := false;
+      end if;
 
       C_STATE : case ( r.state ) is
          when IDLE =>
@@ -189,8 +198,8 @@ begin
 
          when START =>
             -- wait for bus to become available
-            if ( rsp.busBsy = '0' ) then
-               v.i2cCmd        := i2cSetCmd( I2C_START, bsy => rsp.busBsy );
+            if ( ( rsp.busBsy = '0' ) or r.owner ) then
+               v.i2cCmd        := i2cSetCmd( I2C_START, own => v.owner );
                v.state         := CMD_WAIT;
                v.strmMst.ben   := "00";
                v.strmMst.last  := '0';
@@ -322,6 +331,9 @@ begin
                         v.state := XFER;
                      end if;
                   else
+                     if ( r.i2cCmd.typ = I2C_START ) then
+                        v.owner := true;
+                     end if;
                      v.state := r.retState;
                   end if;
                end if;
@@ -414,6 +426,51 @@ begin
          I2cSda_T   => i2c_sda_t
 
       );
+
+   G_ILA : if ( GEN_ILA_G ) generate
+      signal p0 : std_logic_vector(63 downto 0) := (others => '0');
+      signal p1 : std_logic_vector(63 downto 0) := (others => '0');
+      signal p2 : std_logic_vector(63 downto 0) := (others => '0');
+      signal p3 : std_logic_vector(63 downto 0) := (others => '0');
+   begin
+
+      p0( 3 downto  0) <= std_logic_vector( to_unsigned( StateType'pos( r.state ), 4 ) );
+      p0(           4) <= r.i2cCmd.vld;
+      p0( 7 downto  5) <= r.i2cCmd.typ;
+      p0(           8) <= i2cCmdRdy;
+      p0(           9) <= rsp.vld;
+      p0(          10) <= rsp.ack;
+      p0(          11) <= rsp.arbLost;
+      p0(          12) <= rsp.seq;
+      p0(          13) <= rsp.busBsy;
+      p0(          14) <= rsp.cmdTimo;
+      p0(          15) <= toSl( r.owner );
+      p0(          16) <= r.strmMst.valid;
+      p0(          17) <= r.strmMst.last;
+      p0(19 downto 18) <= r.strmMst.ben;
+      p0(          20) <= strmRdyOb;
+      p0(23 downto 21) <= (others => '0');
+      p0(          24) <= strmMstIb.valid;
+      p0(          25) <= strmMstIb.last;
+      p0(27 downto 26) <= strmMstIb.ben;
+      p0(          28) <= r.strmRdyIb;
+      p0(31 downto 29) <= (others => '0');
+      p0(          32) <= r.xMst.valid;
+      p0(          33) <= r.xMst.last;
+      p0(35 downto 34) <= r.xMst.ben;
+      p0(51 downto 36) <= r.xMst.data;
+      p0(59 downto 52) <= r.i2cCmd.dat;
+      p0(63 downto 60) <= (others => '0');
+
+      U_ILA : component Ila_256
+         port map (
+            clk    => clk,
+            probe0 => p0,
+            probe1 => p1,
+            probe2 => p2,
+            probe3 => p3
+         );
+   end generate G_ILA;
 
    strmRdyIb <= r.strmRdyIb;
    strmMstOb <= r.strmMst;
