@@ -16,7 +16,7 @@ entity PsiI2cStreamIF is
       I2C_FREQ_G      : real    := 100.0E3;  -- in Hz
       BUSY_TIMEOUT_G  : real    := 0.1;      -- in sec
       CMD_TIMEOUT_G   : real    := 100.0e-6; -- in sec     $$ constant=10.0e-6 $$
-      GEN_ILA_G       : boolean := false
+      GEN_ILA_G       : boolean := true
    );
    port (
       clk             : in  std_logic;
@@ -184,6 +184,7 @@ begin
                   -- either read with no payload "11" or write with more data coming "00"
                   v.strmRdyIb  := '0';
                   v.state      := START;
+                  v.xMst       := strmMstIb;
                else
                   -- write with no data or read with extra data
                   v.err        := '1';
@@ -220,7 +221,7 @@ begin
             -- this is a tricky corner case; since this is a write
             -- but subsequent transfers could be either read or write
             -- depending on i2cDest(0).
-            v.xMst.last := '0';
+
             -- we set xMst.ben = "11" here so that the RESULT check
             -- proceeds to the next transaction;
             -- in XACT, we check the i2cDest(0) bit and do the right
@@ -228,17 +229,21 @@ begin
             if ( r.i2cDest(0) = '1' ) then
                v.xMst.ben  := "11"; -- this causes RESULT to proceed to XACT
                                     -- where a new READ will be issued
+               v.xMst.last := '1';  -- read case: there is no more data coming (verified in INIT)
             else
+               -- we want to continue writing; in INIT state we confirmed
+               -- that the first beat had last = '0'; we mark this here
+               -- in case there is an error so that RESULT proceeds to DRAIN
                v.xMst.ben  := "00"; -- this causes RESULT to proceed to RCV_DATA
+               v.xMst.last := '0';
             end if;
-                     
+
          when RCV_DATA =>
             v.strmRdyIb := '1';
             if ( ( r.strmRdyIb and strmMstIb.valid ) = '1' ) then
                -- doesn't matter if we latch a bogus address
                v.strmRdyIb := '0';
                v.xMst      := strmMstIb;
-               v.state     := XFER;
                if ( strmMstIb.ben = "00" ) then
                   -- skip this word
                   if ( strmMstIb.last = '1' ) then
@@ -410,7 +415,7 @@ begin
          RspAck     => rsp.ack,
          RspArbLost => rsp.arbLost,
          RspSeq     => rsp.seq,
-         -- Status Interface 
+         -- Status Interface
          BusBusy    => rsp.busBsy,
          TimeoutCmd => rsp.cmdTimo,
          -- I2c Interface with internal Tri-State (InternalTriState_g = true)
@@ -461,6 +466,9 @@ begin
       p0(51 downto 36) <= r.xMst.data;
       p0(59 downto 52) <= r.i2cCmd.dat;
       p0(63 downto 60) <= (others => '0');
+
+      p1(15 downto  0) <= strmMstIb.data;
+      p1(63 downto 16) <= (others => '0');
 
       U_ILA : component Ila_256
          port map (
