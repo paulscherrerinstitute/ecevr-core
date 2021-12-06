@@ -1162,6 +1162,7 @@ begin
       signal spiSel        : std_logic := '0';
       signal axiSel        : std_logic := '0';
       signal escRst        : std_logic := '0';
+      signal eepRst        : std_logic := '0';
       signal hbiRst        : std_logic := '0';
 
       signal testFailed    : std_logic_vector(4 downto 0) := (others => '0');
@@ -1197,6 +1198,7 @@ begin
       axiSel       <= lan9254LocReg(2);
       escRst       <= lan9254LocReg(4);
       hbiRst       <= lan9254LocReg(5);
+      eepRst       <= lan9254LocReg(6);
 
       lan9254LocRegR(0) <= lan9254_irq;
 
@@ -1658,7 +1660,7 @@ begin
                eventMapClr        => x"FF",
 
                busClk             => sysClk,
-               busRst             => sysRst,
+               busRst             => escRst,
 
                dbufMaps           => dbufSegments,
                config             => configReq.txPDO,
@@ -1683,6 +1685,8 @@ begin
                configAck          => configAck,
                dbufMaps           => dbufSegments,
 
+               i2cAddr2BMode      => '0',
+
                i2cSclInp          => eeprom_scl_i,
                i2cSclOut          => eeprom_scl_o,
                i2cSclHiZ          => eeprom_scl_t,
@@ -1694,7 +1698,7 @@ begin
                retries            => configRetries
             );
 
-         G_I2C_ILA : if ( false ) generate
+         G_I2C_ILA : if ( true ) generate
             signal clkdiv : unsigned(5 downto 0) := (others => '0');
             signal ilaClk : std_logic;
          begin
@@ -1721,12 +1725,12 @@ begin
                );
          end generate G_I2C_ILA;
 
-         configRst <= sysRst or configRstR;
+         configRst <= escRst or configRstR or eepRst;
 
          P_CFG_SEQ : process ( sysClk ) is
          begin
             if ( rising_edge( sysClk ) ) then
-               if ( sysRst = '1' ) then
+               if ( escRst = '1' ) then
                   configRstR <= '0';
                else
                   configRstR <= configRstRIn;
