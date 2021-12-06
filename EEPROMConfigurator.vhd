@@ -9,6 +9,8 @@ use work.IPAddrConfigPkg.all;
 use work.EvrTxPDOPkg.all;
 use work.EEPROMConfigPkg.all;
 
+use work.IlaWrappersPkg.all;
+
 entity EEPROMConfigurator is
    generic (
       CLOCK_FREQ_G       : real;               --Hz; at least 12*i2c freq
@@ -16,9 +18,24 @@ entity EEPROMConfigurator is
       I2C_BUSY_TIMEOUT_G : real    := 0.1;     -- sec
       I2C_CMD_TIMEOUT_G  : real    := 1.0E-3;  -- sec
       MAX_TXPDO_MAPS_G   : natural := 16;
-      EEPROM_OFFSET_G    : natural := 0;
-      EEPROM_SIZE_G      : natural := 4096;    -- in BITs; determines how many address bytes are used
-      I2C_ADDR_G         : std_logic_vector(6 downto 0) := "1010000"
+      EEPROM_OFFSET_G    : natural := 0;       -- address of the configuration area
+                                               -- if set to 0 then the SII category
+                                               -- headers are scanned.
+      CATEGORY_ID_G      : std_logic_vector(15 downto 0) := x"0001";
+                                               -- category ID to scan for; use a device-
+                                               -- (or vendor-) specific ID according to
+                                               -- the SII spec. Ignored if EEPROM_OFFSET_G
+                                               -- is nonzero.
+      EEPROM_SIZE_G      : natural := 16384;   -- in bits; it's probably a good idea
+                                               -- to always use the maximum. Smaller
+                                               -- devices will not respond if the higher
+                                               -- bits don't match (but could be banked).
+                                               -- OTOH, setting this generic to a small
+                                               -- value renders larger devices unusable!
+                                               -- 1- vs. 2-byte addressing can be switched
+                                               -- dynamically.
+      I2C_ADDR_G         : std_logic_vector(6 downto 0) := "1010000";
+      GEN_ILA_G          : boolean := true
    );
    port (
       clk                : in  std_logic;
@@ -29,6 +46,10 @@ entity EEPROMConfigurator is
       configReq          : out EEPROMConfigReqType;
       configAck          : in  EEPROMConfigAckType;
       dbufMaps           : out MemXferArray(MAX_TXPDO_MAPS_G - 1 downto 0);
+
+      i2cAddr2BMode      : in  std_logic := toSl( EEPROM_SIZE_G >= 32768 );
+                                                 -- assert if eeprom used 2 address bytes
+                                                 -- (>= 32kbit devices).
 
       i2cSclInp          : in  std_logic := '1';
       i2cSclOut          : out std_logic;
@@ -56,7 +77,6 @@ architecture rtl of EEPROMConfigurator is
 
    -- maximum length of a single transfer operation by PsiI2cStrmIF
    constant MAX_CHUNK_C           : natural       := 128;
-   constant ADDR_2B_C             : boolean       := (EEPROM_SIZE_G > 16384);
 
    constant I2C_RD_C              : std_logic     := '1';
    constant I2C_WR_C              : std_logic     := '0';
@@ -64,7 +84,6 @@ architecture rtl of EEPROMConfigurator is
    constant NO_STOP_C             : std_logic     := '1';
    constant GEN_STOP_C            : std_logic     := '0';
 
-   constant CAT_DEV_ME_C          : std_logic_vector(15 downto 0) := x"0001";
    constant CAT_SM_C              : std_logic_vector(15 downto 0) := x"0029";
    constant CAT_END_C             : std_logic_vector(15 downto 0) := x"FFFF";
    constant CAT_OFF_C             : natural                       := 16#80#;
@@ -73,15 +92,18 @@ architecture rtl of EEPROMConfigurator is
    constant SM2_LEN_OFF_C         : natural                       := 8*2 + 2;
    constant SM_LEN_LEN_C          : natural                       := 2;
 
+   constant MAX_CATS_C            : natural                       := 63;
+
    function i2cHeader(
-      op         : std_logic;
-      count      : unsigned(6 downto 0)          := (others => '0'); -- desired count - 1
-      noStop     : std_logic                     := GEN_STOP_C;
-      addr       : unsigned        (15 downto 0) := (others => '0')
+      constant a2b        : in std_logic;
+      constant op         : in std_logic;
+      constant count      : in unsigned(6 downto 0)          := (others => '0'); -- desired count - 1
+      constant noStop     : in std_logic                     := GEN_STOP_C;
+      constant addr       : in unsigned        (15 downto 0) := (others => '0')
    )  return std_logic_vector is
       variable a : std_logic_vector( 6 downto 0) := I2C_ADDR_G;
    begin
-      if ( ( EEPROM_SIZE_G > 2048 ) and ( op = I2C_WR_C ) ) then
+      if ( ( a2b = '0' ) and ( EEPROM_SIZE_G > 2048 ) and ( op = I2C_WR_C ) ) then
          if    ( EEPROM_SIZE_G <= 4096 ) then
             a(0 downto 0) := std_logic_vector( addr( 8 downto 8) );
          elsif ( EEPROM_SIZE_G <= 8192 ) then
@@ -126,6 +148,7 @@ architecture rtl of EEPROMConfigurator is
       catDone   : boolean;
       cfgFound  : boolean;
       retries   : unsigned( 3 downto 0);
+      catsFound : natural range 0 to MAX_CATS_C;
    end record RegType;
 
    constant REG_INIT_C : RegType := (
@@ -158,7 +181,8 @@ architecture rtl of EEPROMConfigurator is
       lnMaps    => 0,
       catDone   => (EEPROM_OFFSET_G /= 0),
       cfgFound  => false,
-      retries   => (others => '0')
+      retries   => (others => '0'),
+      catsFound => 0
    );
 
    procedure storeByte(
@@ -224,11 +248,15 @@ begin
       configReqLoc.txPDO.numMaps  <= r.nMaps;
    end process P_MAP;
 
-   P_COMB : process ( r, configReqLoc, configAck, strmTxRdy, strmRxMst )
-      variable v : RegType;
+   P_COMB : process ( r, configReqLoc, configAck, strmTxRdy, strmRxMst, i2cAddr2BMode ) is
+      variable v   : RegType;
+      variable a2b : std_logic;
    begin
 
       v := r;
+
+      -- abbreviation
+      a2b := i2cAddr2BMode;
 
       -- ack flags
       if ( ( r.strmTxMst.valid and strmTxRdy ) = '1' ) then
@@ -268,7 +296,7 @@ begin
                end if;
                v.eepNext         := r.eepAddr + v.cnt + 1;
                v.strmTxMst.last  := '0';
-               v.strmTxMst.data  := i2cHeader( I2C_WR_C, noStop => NO_STOP_C, addr => r.eepAddr );
+               v.strmTxMst.data  := i2cHeader( a2b, I2C_WR_C, noStop => NO_STOP_C, addr => r.eepAddr );
                v.strmTxMst.ben   := "11";
                v.strmTxMst.valid := '1';
                v.state           := ADDR;
@@ -291,17 +319,19 @@ begin
                end if;
             elsif ( not r.catDone ) then
                -- we now have a category header
-               v.wcnt    := 0;
-               v.wrp     := 0;
+               v.wcnt      := 0;
+               v.wrp       := 0;
                -- skip to next category
-               v.eepAddr := r.eepAddr + shift_left( resize( toU16( r.cfgImg, 2 ) , v.eepAddr'length ), 1 );
+               v.eepAddr   := r.eepAddr + shift_left( resize( toU16( r.cfgImg, 2 ) , v.eepAddr'length ), 1 );
+               v.catsFound := r.catsFound + 1;
 
-               if ( (r.cfgImg(1) & r.cfgImg(0)) = CAT_END_C ) then
-                  v.catDone := true;
+               if ( ( (r.cfgImg(1) & r.cfgImg(0)) = CAT_END_C ) or (r.catsFound = MAX_CATS_C) ) then
+                  v.catDone     := true;
+                  v.catsFound   := r.catsFound;
                   if ( r.cfgFound ) then
                      -- go read the 'real' configuration
-                     v.eepAddr := r.cfgAddr;
-                     v.eepEnd  := r.cfgEnd;
+                     v.eepAddr  := r.cfgAddr;
+                     v.eepEnd   := r.cfgEnd;
                   else
                      -- fall back
                      v.state    := CHECK;
@@ -309,7 +339,7 @@ begin
                      v.allOnes  := '0';
                      v.cnt      := to_unsigned( 0, v.cnt'length );
                   end if;
-               elsif ( ( r.cfgImg(1) & r.cfgImg(0) ) = CAT_DEV_ME_C ) then
+               elsif ( ( r.cfgImg(1) & r.cfgImg(0) ) = CATEGORY_ID_G ) then
                   -- that's us! set the reader up for the 'real' data
                   v.cfgFound := true;
                   v.cfgAddr  := r.eepAddr;
@@ -368,7 +398,7 @@ begin
          when ADDR =>
             -- send EEPROM read address
             if ( strmTxRdy = '1' ) then
-               if ( ADDR_2B_C ) then
+               if ( i2cAddr2BMode = '1' ) then
                   -- address is expected as big-endian
                   v.strmTxMst.data               := std_logic_vector( bswap( r.eepAddr ) );
                else
@@ -404,7 +434,7 @@ begin
 
          when READ =>
             if ( strmTxRdy = '1' ) then
-               v.strmTxMst.data  := i2cHeader( I2C_RD_C, r.cnt );
+               v.strmTxMst.data  := i2cHeader( a2b, I2C_RD_C, r.cnt );
                v.strmTxMst.ben   := "11";
                v.strmTxMst.valid := '1';
                v.strmTxMst.last  := '1';
@@ -528,5 +558,70 @@ begin
 
    debug(31 downto 4) <= (others => '0');
    debug( 3 downto 0) <= std_logic_vector( to_unsigned( StateType'pos( r.state ), 4 ) );
+
+   G_ILA : if ( GEN_ILA_G ) generate
+      signal p0 : std_logic_vector(63 downto 0) := (others => '0');
+      signal p1 : std_logic_vector(63 downto 0) := (others => '0');
+      signal p2 : std_logic_vector(63 downto 0) := (others => '0');
+      signal p3 : std_logic_vector(63 downto 0) := (others => '0');
+   begin
+      p0( 3 downto  0) <= std_logic_vector( to_unsigned( StateType'pos( r.state ), 4 ) );
+      p0( 7 downto  4) <= std_logic_vector( to_unsigned( StateType'pos( r.retState ), 4 ) );
+      p0(23 downto  8) <= r.strmTxMst.data;
+      p0(          24) <= r.strmTxMst.valid;
+      p0(          25) <= r.strmTxMst.last;
+      p0(27 downto 26) <= r.strmTxMst.ben;
+      p0(43 downto 28) <= std_logic_vector( r.eepAddr );
+      p0(59 downto 44) <= std_logic_vector( r.cfgAddr );
+      p0(61 downto 60) <= r.smCfg32;
+      p0(          62) <= strmTxRdy;
+      p0(          63) <= r.macVld;
+
+      p1( 3 downto  0) <= std_logic_vector( to_unsigned( r.wrp,  4 ) );
+      p1( 7 downto  4) <= std_logic_vector( to_unsigned( r.lwrp, 4 ) );
+      p1(15 downto  8) <= std_logic_vector( to_unsigned( r.wcnt, 8 ) );
+      p1(23 downto 16) <= std_logic_vector( to_unsigned( r.lwcnt, 8 ) );
+      p1(31 downto 24) <= std_logic_vector( to_unsigned( r.eepEnd, 8 ) );
+      p1(39 downto 32) <= std_logic_vector( to_unsigned( r.cfgEnd, 8 ) );
+      p1(46 downto 40) <= std_logic_vector( r.cnt );
+      p1(          47) <= toSl(r.catDone);
+      p1(51 downto 48) <= std_logic_vector( to_unsigned( r.nMaps, 4 ) );
+      p1(55 downto 52) <= std_logic_vector( to_unsigned( r.lnMaps, 4 ) );
+      p1(63 downto 56) <= r.tmp;
+
+      p2( 7 downto  0) <= r.cfgImg(0);
+      p2(15 downto  8) <= r.cfgImg(1);
+      p2(23 downto 16) <= r.cfgImg(2);
+      p2(31 downto 24) <= r.cfgImg(3);
+      p2(39 downto 32) <= r.cfgImg(4);
+      p2(47 downto 40) <= r.cfgImg(5);
+      p2(55 downto 48) <= r.cfgImg(6);
+      p2(63 downto 56) <= r.cfgImg(7);
+
+      p3( 7 downto  0) <= r.mapImg(0);
+      p3(15 downto  8) <= r.mapImg(1);
+      p3(23 downto 16) <= r.mapImg(2);
+      p3(31 downto 24) <= r.mapImg(3);
+      p3(          32) <= toSl( r.cfgFound );
+      p3(          33) <= r.strmRxRdy;
+      p3(          34) <= r.macVld;
+      p3(          35) <= r.ip4Vld;
+      p3(          36) <= r.udpVld;
+      p3(          37) <= '0';
+      p3(43 downto 38) <= std_logic_vector( to_unsigned( r.catsFound, 6 ) );
+      p3(          44) <= strmRxMst.valid;
+      p3(          45) <= strmRxMst.last;
+      p3(47 downto 46) <= strmRxMst.ben;
+      p3(63 downto 48) <= strmRxMst.data;
+
+      U_ILA : Ila_256
+         port map (
+            clk    => clk,
+            probe0 => p0,
+            probe1 => p1,
+            probe2 => p2,
+            probe3 => p3
+         );
+   end generate G_ILA;
 
 end architecture rtl;
