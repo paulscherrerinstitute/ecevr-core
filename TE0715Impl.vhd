@@ -55,6 +55,7 @@ use work.Lan9254ESCPkg.all;
 use work.MicroUDPPkg.all;
 use work.Udp2BusPkg.all;
 use work.EvrTxPDOPkg.all;
+use work.Evr320ConfigPkg.all;
 use work.EEPROMConfigPkg.all;
 
 library unisim;
@@ -563,7 +564,7 @@ begin
 --          axiWriteSlave               => axiWriteSlave
 --      );
 
-   GEN_AXI_ILA : if ( true  ) generate
+   GEN_AXI_ILA : if ( false  ) generate
    U_Ila_Axil : entity work.IlaAxiLite
       port map (
           axilClk                => sysClk,
@@ -1346,6 +1347,8 @@ begin
          signal timingMGTSt    : std_logic_vector(31 downto 0) := (others => '0');
 
          signal usr_evts_adj   : std_logic_vector(3 downto 0);
+         signal latchedEvents  : std_logic_vector(1 downto 0);
+         signal extra_events   : std_logic_vector(NUM_EXTRA_EVENTS_C - 1 downto 0);
          signal evrTimestampHi : std_logic_vector(31 downto 0) := (others => '0');
          signal evrTimestampLo : std_logic_vector(31 downto 0) := (others => '0');
          signal eventCode      : std_logic_vector( 7 downto 0) := (others => '0');
@@ -1613,7 +1616,8 @@ begin
             generic map (
                g_BUS_CLOCK_FREQ  => natural( CLK_FREQ_C ),
                g_N_EVT_DBL_BUFS  => 0,
-               g_DATA_STREAM_EN  => 1
+               g_DATA_STREAM_EN  => 1,
+               g_EXTRA_RAW_EVTS  => NUM_EXTRA_EVENTS_C
             )
             port map (
                bus_CLK           => sysClk,
@@ -1622,10 +1626,14 @@ begin
                bus_Req           => busSubReq(BUS_SIDX_EVR_C),
                bus_Rep           => busSubRep(BUS_SIDX_EVR_C),
 
+               evr_CfgReq        => configReq.evr320,
+               evr_CfgAck        => configAck.evr320,
+
                clk_evr           => timingRecClk,
                rst_evr           => timingRecRst,
 
                usr_events_adj_o  => usr_evts_adj,
+               extra_events_o    => extra_events,
 
                event_o           => eventCode,
                event_vld_o       => eventCodeVld,
@@ -1637,8 +1645,32 @@ begin
                mgt_status_i      => timingMGTSt
             );
 
-         ec_LATCH_o(0) <= usr_evts_adj(0);
+         P_LATCH : process ( timingRecClk ) is
+         begin
+            if ( rising_edge( timingRecClk ) ) then
+               if ( timingRecRst = '1' ) then
+                  latchedEvents <= (others => '0');
+               else
+                  if ( extra_events(0) = '1' ) then
+                     latchedEvents(0) <= '1';
+                  end if;
+                  if ( extra_events(1) = '1' ) then
+                     latchedEvents(0) <= '0';
+                  end if;
+                  if ( extra_events(2) = '1' ) then
+                     latchedEvents(1) <= '1';
+                  end if;
+                  if ( extra_events(3) = '1' ) then
+                     latchedEvents(1) <= '0';
+                  end if;
+               end if;
+            end if;
+         end process P_LATCH;
+
+         ec_LATCH_o(0) <= latchedEvents(0);
          ec_LATCH_t(0) <= '0'; -- out
+         ec_LATCH_o(1) <= extra_events(2);
+         ec_LATCH_t(1) <= '0'; -- out
 
          U_TXPDO : entity work.EvrTxPDO
             generic map (
@@ -1652,7 +1684,7 @@ begin
                evrClk             => timingRecClk,
                evrRst             => timingRecRst,
 
-               pdoTrg             => usr_evts_adj(1),
+               pdoTrg             => usr_evts_adj(0),
                tsHi               => evrTimestampHi,
                tsLo               => evrTimestampLo,
                eventCode          => eventCode,
@@ -1698,7 +1730,7 @@ begin
                retries            => configRetries
             );
 
-         G_I2C_ILA : if ( true ) generate
+         G_I2C_ILA : if ( false ) generate
             signal clkdiv : unsigned(5 downto 0) := (others => '0');
             signal ilaClk : std_logic;
          begin

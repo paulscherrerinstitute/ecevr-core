@@ -7,6 +7,7 @@ use work.Lan9254Pkg.all;
 use work.Lan9254ESCPkg.all;
 use work.IPAddrConfigPkg.all;
 use work.EvrTxPDOPkg.all;
+use work.Evr320ConfigPkg.all;
 use work.EEPROMConfigPkg.all;
 
 use work.IlaWrappersPkg.all;
@@ -67,10 +68,13 @@ end entity EEPROMConfigurator;
 
 architecture rtl of EEPROMConfigurator is
 
-   constant NETCFG_LEN_C          : natural       := slv08ArrayLen( toSlv08Array( makeIPAddrConfigReq     ) );
-   constant TXPCFG_LEN_C          : natural       := slv08ArrayLen( toSlv08Array( EVR_TXPDO_CONFIG_INIT_C ) );
+   constant VERSION_OFF_C         : natural       := 0;
+   constant NET_CFG_OFF_C         : natural       := VERSION_OFF_C + 1;
+   constant EVR_NPG_OFF_C         : natural       := NET_CFG_OFF_C + slv08ArrayLen( toSlv08Array( makeIPAddrConfigReq      ) );
+   constant EVR_CFG_OFF_C         : natural       := EVR_NPG_OFF_C + 1;
+   constant TXP_CFG_OFF_C         : natural       := EVR_CFG_OFF_C + slv08ArrayLen( toSlv08Array( EVR320_CONFIG_REQ_INIT_C ) );
+   constant CFG_LEN_C             : natural       := TXP_CFG_OFF_C + slv08ArrayLen( toSlv08Array( EVR_TXPDO_CONFIG_INIT_C  ) );
 
-   constant CFG_LEN_C             : natural       := NETCFG_LEN_C + TXPCFG_LEN_C;
    constant ELM_LEN_C             : natural       := slv08ArrayLen( toSlv08Array( MEM_XFER_INIT_C ) );
    constant MAP_LEN_C             : natural       := MAX_TXPDO_MAPS_G * ELM_LEN_C;
    constant PROM_LEN_C            : natural       := MAP_LEN_C + CFG_LEN_C;
@@ -130,6 +134,7 @@ architecture rtl of EEPROMConfigurator is
       macVld    : std_logic;
       ip4Vld    : std_logic;
       udpVld    : std_logic;
+      evrCfgVld : std_logic;
       wrp       : natural range 0 to CFG_LEN_C; -- CFG_LEN_C - 1 would suffice but v.wrp := r.wrp + 1
       lwrp      : natural range 0 to CFG_LEN_C; -- fails simulation even if OOR value is never used later.
       wcnt      : natural range 0 to PROM_LEN_C;
@@ -164,6 +169,7 @@ architecture rtl of EEPROMConfigurator is
       macVld    => '0',
       ip4Vld    => '0',
       udpVld    => '0',
+      evrCfgVld => '0',
       wrp       =>  0,
       lwrp      =>  0,
       wcnt      =>  0,
@@ -224,6 +230,11 @@ architecture rtl of EEPROMConfigurator is
       return c;
    end function toU16;
 
+   function versionMatch(constant x : RegType) return std_logic is
+   begin
+      return toSl( x.cfgImg(VERSION_OFF_C) = EEPROM_LAYOUT_VERSION_C );
+   end function versionMatch;
+
    signal r                 : RegType := REG_INIT_C;
    signal rin               : RegType;
 
@@ -239,12 +250,16 @@ begin
 
    P_MAP  : process ( r ) is
    begin
-      configReqLoc.net            <= toIPAddrConfigReqType( r.cfgImg(0            to NETCFG_LEN_C - 1 ) );
-      configReqLoc.txPDO          <= toEvrTxPDOConfigType ( r.cfgImg(NETCFG_LEN_C to CFG_LEN_C    - 1 ) );
+      configReqLoc.version        <= r.cfgImg(VERSION_OFF_C);
+      configReqLoc.net            <= toIPAddrConfigReqType( r.cfgImg(NET_CFG_OFF_C to EVR_NPG_OFF_C - 1 ) );
+      configReqLoc.evr320NumPG    <= r.cfgImg(EVR_NPG_OFF_C);
+      configReqLoc.evr320         <= toEvr320ConfigReqType( r.cfgImg(EVR_CFG_OFF_C to TXP_CFG_OFF_C - 1 ) );
+      configReqLoc.txPDO          <= toEvrTxPDOConfigType ( r.cfgImg(TXP_CFG_OFF_C to CFG_LEN_C     - 1 ) );
       configReqLoc.esc            <= r.smCfg;
       configReqLoc.net.macAddrVld <= r.macVld;
       configReqLoc.net.ip4AddrVld <= r.ip4Vld;
       configReqLoc.net.udpPortVld <= r.udpVld;
+      configReqLoc.evr320.req     <= r.evrCfgVld;
       configReqLoc.txPDO.numMaps  <= r.nMaps;
    end process P_MAP;
 
@@ -274,6 +289,9 @@ begin
       end if;
       if ( ( r.smCfg.valid and configAck.esc.ack ) = '1' ) then
          v.smCfg.valid := '0';
+      end if;
+      if ( ( r.evrCfgVld and configAck.evr320.ack ) = '1' ) then
+         v.evrCfgVld := '0';
       end if;
 
 
@@ -375,20 +393,21 @@ begin
             v.allZeros := r.allZeros and toSl( r.cfgImg( to_integer( r.cnt ) ) = x"00" );
             v.allOnes  := r.allOnes  and toSl( r.cfgImg( to_integer( r.cnt ) ) = x"FF" );
             if    ( r.cnt = 5 ) then
-               v.macVld   := not v.allOnes and not v.allZeros;
+               v.macVld   := not v.allOnes and not v.allZeros and versionMatch( r );
                v.allOnes  := '1';
                v.allZeros := '1';
             elsif ( r.cnt = 9 ) then
-               v.ip4Vld   := not v.allOnes and not v.allZeros;
+               v.ip4Vld   := not v.allOnes and not v.allZeros and versionMatch( r );
                v.allOnes  := '1';
                v.allZeros := '1';
             elsif ( r.cnt = 11 ) then
-               v.udpVld   := not v.allOnes and not v.allZeros;
+               v.udpVld   := not v.allOnes and not v.allZeros and versionMatch( r );
                v.allOnes  := '1';
             elsif ( r.cnt = CFG_LEN_C - 1 ) then
                v.state         := DONE;
                -- let the ESC start
                v.smCfg.valid   := '1';
+               v.evrCfgVld     := versionMatch( r );
             end if;
             v.cnt := r.cnt + 1;
 
@@ -607,7 +626,7 @@ begin
       p3(          34) <= r.macVld;
       p3(          35) <= r.ip4Vld;
       p3(          36) <= r.udpVld;
-      p3(          37) <= '0';
+      p3(          37) <= r.evrCfgVld;
       p3(43 downto 38) <= std_logic_vector( to_unsigned( r.catsFound, 6 ) );
       p3(          44) <= strmRxMst.valid;
       p3(          45) <= strmRxMst.last;

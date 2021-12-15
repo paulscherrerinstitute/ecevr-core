@@ -15,12 +15,14 @@ use ieee.math_real.all;
 
 use work.evr320_pkg.all;
 use work.Udp2BusPkg.all;
+use work.Evr320ConfigPkg.all;
 
 entity evr320_udp2bus is
   generic (
     g_CS_TIMEOUT_CNT              : natural := 16#15CA20#; -- data frame checksum timeout (in EVR clks); 0 disables
     g_ADDR_MSB                    : natural;
-    g_USR_CONTROL_INIT            : std_logic_vector(31 downto 0) := (others => '0')
+    g_USR_CONTROL_INIT            : std_logic_vector(31 downto 0) := (others => '0');
+    g_EXTRA_RAW_EVTS              : natural range 0 to 8          := 0  -- additional events to decode (no delay/width)
   );
   port(
     -- ------------------------------------------------------------------------
@@ -30,7 +32,8 @@ entity evr320_udp2bus is
     bus_RESET                     : in    std_logic;                    
     bus_Req                       : in    Udp2BusReqType;
     bus_Rep                       : out   Udp2BusRepType;
-
+    evr_CfgReq                    : in    Evr320ConfigReqType := EVR320_CONFIG_REQ_INIT_C;
+    evr_CfgAck                    : Out   Evr320ConfigAckType;
     ---------------------------------------------------------------------------
     -- EVR320 Memory/Parameter Interface
     ---------------------------------------------------------------------------
@@ -49,6 +52,7 @@ entity evr320_udp2bus is
     misc_status_i                 : in    std_logic_vector(15 downto  0);
     usr_status_i                  : in    std_logic_vector(31 downto  0) := (others => '0'); -- not resynced
     usr_control_o                 : out   std_logic_vector(31 downto  0);
+    extra_events_o                : out   typ_arr8(g_EXTRA_RAW_EVTS - 1 downto 0) := (others => (others => '0'));
     ---------------------------------------------------------------------------
     -- EVR320 pulse output paremters
     ---------------------------------------------------------------------------
@@ -77,11 +81,17 @@ architecture rtl of evr320_udp2bus is
   -- make backwards compatibility easier...
 
   -- If LD_NUM_IREGS > 8 then the tmem write logic needs to be modified!
-  constant LD_NUM_IREGS           : natural  range 0 to 8 := 4; -- 4-byte words
+  constant LD_NUM_IREGS           : natural  range 0 to 8 := 5; -- 4-byte words
  
   constant c_RXRESETDONE          : integer := 4;
   constant c_RXLOSSOFSYNC         : integer := 15;
   constant c_RXPLLLKDET           : integer :=  1;
+
+  -- --------------------------------------------------------------------------
+  -- Type definitions
+  -- --------------------------------------------------------------------------
+
+  type   typ_arr32              is array( integer range <> ) of std_logic_vector(31 downto 0);
 
   -- --------------------------------------------------------------------------
   -- Signal definitions
@@ -91,6 +101,8 @@ architecture rtl of evr320_udp2bus is
   signal rvalid                 : std_logic                                         := '0';
   signal rberr                  : std_logic                                         := '0';
   signal wberr                  : std_logic                                         := '0';
+
+  signal evr_CfgAckLoc          : Evr320ConfigAckType := EVR320_CONFIG_ACK_INIT_C;
   
   -- evr params
   signal mgt_status_evr         : std_logic_vector(15 downto 0)   := (others => '0');
@@ -133,14 +145,17 @@ architecture rtl of evr320_udp2bus is
 
   -- event pulse config
   
-  signal evr_puls_width_cfg_s : typ_arr_width :=(others => UsrEventWidthDefault_c);
-  signal evr_puls_delay_cfg_s : typ_arr_delay :=(others=>(others=>'0'));
+  signal evr_puls_width_cfg_s   : typ_arr_width := (others => UsrEventWidthDefault_c);
+  signal evr_puls_delay_cfg_s   : typ_arr_delay := (others => (others => '0'));
 
   -- status counters
   signal miscCount              : typ_arrU16(2 downto 0) := (others => (others => '0'));
 
   signal iregAddr               : unsigned(LD_NUM_IREGS - 1 downto 0) := (others => '0');
   signal iregData               : std_logic_vector(31 downto 0);
+
+  signal extra_events           : typ_arr8(g_EXTRA_RAW_EVTS - 1 downto 0)            := (others => (others => '0'));
+  signal extra_events_concat    : typ_arr32((g_EXTRA_RAW_EVTS + 3) / 4 - 1 downto 0) := (others => (others => '0'));
 
 -- ----------------------------------------------------------------------------
 -- ----------------------------------------------------------------------------
@@ -290,7 +305,8 @@ begin
     end if;
   end process;
 
-  P_IREG_RD_MUX : process ( iregAddr, evr_puls_width_cfg_s, evr_puls_delay_cfg_s ) is
+  P_IREG_RD_MUX : process ( iregAddr, evr_puls_width_cfg_s, evr_puls_delay_cfg_s, extra_events_concat ) is
+    variable hi, lo: integer;
   begin
     iregData <= (others => '0');
     if ( iregAddr < 2*evr_puls_width_cfg_s'length ) then
@@ -299,8 +315,16 @@ begin
       else
         iregData(evr_puls_delay_cfg_s(0)'range) <= evr_puls_delay_cfg_s(to_integer(iregAddr(iregAddr'left downto 1)));
       end if;
+    elsif ( (to_integer(iregAddr) >= 20) and (to_integer(iregAddr) < 20 + extra_events_concat'length) ) then
+      iregData <= extra_events_concat( to_integer(iregAddr) - 20 );
     end if;
   end process P_IREG_RD_MUX;
+
+  gen_concat : for i in extra_events'range generate
+    constant j : natural := i mod 4;
+  begin
+    extra_events_concat( i / 4 )(8*j + 7 downto 8*j) <= extra_events(i);
+  end generate gen_concat; 
 
   -- --------------------------------------------------------------------------
   -- Reply mux
@@ -358,7 +382,7 @@ begin
     v_data := (others => '0');
 
     if rising_edge(bus_CLK) then
-    
+
       -- default assignments
       lat_arm <= '0';
 
@@ -463,10 +487,32 @@ begin
                 else
                   evr_puls_delay_cfg_s(to_integer(iregAddr(iregAddr'left downto 1))) <= v_data( evr_puls_delay_cfg_s(0)'range );
                 end if;
+              elsif ( (to_integer(iregAddr) >= 20) and (to_integer(iregAddr) < 20 + (g_EXTRA_RAW_EVTS + 3)/4) ) then
+                for i in 3 downto 0 loop
+                  if ( ( bus_Req.be(i) = '1' ) and ( 4*(to_integer(iregAddr) - 20) + i < extra_events'length ) ) then
+                     extra_events( 4*(to_integer(iregAddr) - 20) + i ) <= bus_req.data(8*i + 7 downto 8*i);
+                  end if;
+                end loop;
               end if;
             when others     => 
           end case;
         end if;
+      end if;
+
+      -- configuration interface
+      if ( evr_CfgReq.req = '1' ) then
+        evr_CfgAckLoc.ack <= not evr_cfgAckLoc.ack;
+        for i in event_enable'range loop
+          event_enable(i)           <= evr_CfgReq.pulseGenParams(i).pulseEnbld;
+          event_numbers(i)          <= evr_CfgReq.pulseGenParams(i).pulseEvent;
+          evr_puls_width_cfg_s(i+1) <= evr_CfgReq.pulseGenParams(i).pulseWidth;
+          evr_puls_delay_cfg_s(i+1) <= evr_CfgReq.pulseGenParams(i).pulseDelay;
+        end loop;
+        for i in extra_events'length - 1 downto 0 loop
+          if ( i < evr_CfgReq.extraEvents(i)'length ) then
+            extra_events(i)           <= evr_CfgReq.extraEvents(i);
+          end if;
+        end loop;
       end if;
     end if;
   end process;
@@ -483,6 +529,8 @@ begin
   evr_latency_measure_ctrl_o  <= (event_nr => lat_event_nr, counter_arm => lat_counter_arm, auto_arm => lat_counter_autoarm);
   mgt_control_o               <= mgt_control;
   usr_control_o               <= usr_control;
+  evr_CfgAck                  <= evr_CfgAckLoc;
+  extra_events_o              <= extra_events;
 
   -- --------------------------------------------------------------------------
   -- add CDC output

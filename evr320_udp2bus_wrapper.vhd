@@ -14,6 +14,7 @@ use ieee.numeric_std.all;
 
 use work.evr320_pkg.all;
 use work.Udp2BusPkg.all;
+use work.Evr320ConfigPkg.all;
 
 entity evr320_udp2bus_wrapper is
   generic(
@@ -24,7 +25,8 @@ entity evr320_udp2bus_wrapper is
     g_DATA_STREAM_EN : natural range 0 to 2 := 2; -- enable streaming interface (1) with fifo (2)
     g_EVR_FORCE_STBL : std_logic := '0';          -- when '1': force 'evr_stable' <= '1'
     g_MAX_LATCNT_PER : real      := 0.01;         -- max. period for latency counter; 0.0 never stops
-    g_CS_TIMEOUT_CNT : natural   := 16#15CA20#    -- data frame checksum timeout (in EVR clks); 0 disables
+    g_CS_TIMEOUT_CNT : natural   := 16#15CA20#;   -- data frame checksum timeout (in EVR clks); 0 disables
+    g_EXTRA_RAW_EVTS : natural   := 0             -- additional events to decode (no delay/width)
   );
   port(
     -- ------------------------------------------------------------------------
@@ -39,6 +41,8 @@ entity evr320_udp2bus_wrapper is
     bus_RESET        : in  std_logic;
     bus_Req          : in  Udp2BusReqType;
     bus_Rep          : out Udp2BusRepType;
+    evr_CfgReq       : in  Evr320ConfigReqType := EVR320_CONFIG_REQ_INIT_C;
+    evr_CfgAck       : Out Evr320ConfigAckType;
     -- ------------------------------------------------------------------------
     -- EVR Interface
     -- ------------------------------------------------------------------------
@@ -65,6 +69,9 @@ entity evr320_udp2bus_wrapper is
     --usr_event_delay_i : in  typ_arr_delay; -- delay in recovery clock cycles event sos,0,1,2,3
     usr_events_adj_o : out std_logic_vector(3 downto 0); -- User defined event pulses adjusted in delay & length
     sos_events_adj_o : out std_logic;   -- Start-of-Sequence adjusted in delay & length
+    -- additional events to decode; unfortunatelye the register map of the evr320 and the
+    -- associated data types are not easily extendable; therefore we provide an additional bank
+    extra_events_o   : out std_logic_vector(g_EXTRA_RAW_EVTS - 1 downto 0);
     --------------------------------------------------------------------------
     -- Decoder axi stream interface, User clock
     --------------------------------------------------------------------------
@@ -124,6 +131,8 @@ architecture rtl of evr320_udp2bus_wrapper is
   signal timestampLoMode_xuser        : std_logic                     := '0';
   signal usr_status                   : std_logic_vector(31 downto 0) := (others => '0');
   signal usr_control                  : std_logic_vector(31 downto 0);
+
+  signal extra_events                 : typ_arr8(g_EXTRA_RAW_EVTS - 1 downto 0) := ( others => (others => '0') );
 
   -- --------------------------------------------------------------------------
   -- Attribute definitions
@@ -220,20 +229,23 @@ begin
   sos_event_o  <= sos_event_s;
 
   -- --------------------------------------------------------------------------
-  -- TMEM 
+  -- UDP2Bus
   -- -------------------------------------------------------------------------- 
   --formatter:off 
   evr320_udp2bus_inst : entity work.evr320_udp2bus
     generic map(
       g_CS_TIMEOUT_CNT           => g_CS_TIMEOUT_CNT,
-      g_ADDR_MSB                 => 10
+      g_ADDR_MSB                 => 10,
+      g_EXTRA_RAW_EVTS           => g_EXTRA_RAW_EVTS
     )
     port map(
-      -- TOSCA2 TMEM Interface 
+      -- UDP2Bus Interface
       bus_CLK                    => bus_CLK,
       bus_RESET                  => bus_RESET,
       bus_Req                    => bus_Req,
       bus_Rep                    => bus_Rep,
+      evr_CfgReq                 => evr_CfgReq,
+      evr_CfgAck                 => evr_CfgAck,
       -- EVR320 Memory/Parameter Interface
       evr_params_o               => evr_params_xuser,
       evr_frequency_i            => evr_frequency,
@@ -250,6 +262,7 @@ begin
       misc_status_i              => misc_status,
       usr_status_i               => usr_status,
       usr_control_o              => usr_control,
+      extra_events_o             => extra_events,
       -- 
       evr_clk_i                  => clk_evr,
       evr_rst_i                  => evr_rst_s,
@@ -472,6 +485,25 @@ begin
     end if;
   end process prc_ts;
 
+  -- --------------------------------------------------------------------------
+  -- Extra events
+  -- --------------------------------------------------------------------------
+  gene_extra_decoders : for dec in g_EXTRA_RAW_EVTS - 1 downto 0 generate
+    prc_xtra_dec : process(clk_evr) is
+    begin
+      if ( rising_edge( clk_evr ) ) then
+         if ( rst_evr = '1' ) then
+            extra_events_o(dec) <= '0';
+         else
+            extra_events_o(dec) <= '0';
+            if ( ( decoder_event_valid = '1' ) and (decoder_event = extra_events(dec) ) ) then 
+               extra_events_o(dec) <= '1';
+            end if;
+         end if;
+      end if;
+    end process prc_xtra_dec;
+  end generate gene_extra_decoders;
+ 
   -- --------------------------------------------------------------------------
   -- port mapping
   -- --------------------------------------------------------------------------
