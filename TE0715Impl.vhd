@@ -1805,7 +1805,7 @@ begin
                when 1 => v    :=           configReq.net.macAddr(31 downto  0);
                when 2 => v    := x"0000" & std_logic_vector( txPdoTrgCount );
                when 3 => v    :=           configReq.net.ip4Addr;
-               when 4 => v    := BUILD_INFO_C(BUILD_INFO_C'left downto BUILD_INFO_C'left - 32 + 1);
+               when 4 => v    := BUILD_INFO_G(BUILD_INFO_G'left downto BUILD_INFO_G'left - 32 + 1);
                when 5 => v    := configReq.esc.sm3Len & configReq.esc.sm2Len;
                when 6 => v(configRetries'range) := std_logic_vector(configRetries);
                when 7 => v    := configDebug;
