@@ -1774,7 +1774,8 @@ begin
             end if;
          end process P_CFG_SEQ;
 
-         P_DIAG : process ( busSubReq(BUS_SIDX_LOC_C), dbufSegments, configReq, configRetries, configRstR, configDebug ) is
+         P_DIAG : process ( busSubReq(BUS_SIDX_LOC_C), dbufSegments, configReq,
+                            configRetries, configRstR, configDebug, txPdoTrgCount ) is
             variable a : unsigned( 7 downto 0 );
             variable v : std_logic_vector(31 downto 0);
             variable q : Udp2BusReqType;
