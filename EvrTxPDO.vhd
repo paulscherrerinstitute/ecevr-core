@@ -259,7 +259,7 @@ begin
             v.xferIdx   := 0;
             if ( rBus.pdoTrg /= pdoTrgBus ) then
                v.state  := X_TS;
-               v.trgCnt := r.trgCnt + 1;
+               v.trgCnt := rBus.trgCnt + 1;
             end if;
 
          when X_TS =>
