@@ -41,7 +41,10 @@ entity EvrTxPDO is
 
       -- EVR/UDP bus master IF (for accessing the EVR data buffer)
       busReq              : out Udp2BusReqType;
-      busRep              : in  Udp2BusRepType
+      busRep              : in  Udp2BusRepType;
+
+      -- diagnostics
+      trgCnt              : out unsigned(15 downto 0)
    );
 end entity EvrTxPDO;
 
@@ -92,6 +95,7 @@ architecture rtl of EvrTxPDO is
       pdoTrg              : std_logic;
       count               : unsigned(3 downto 0);
       xferIdx             : natural range 0 to MAX_MEM_XFERS_G;
+      trgCnt              : unsigned(15 downto 0);
    end record BusRegType;
 
    constant COUNT_ZERO_C  : unsigned(3 downto 0) := (others => '0');
@@ -104,7 +108,8 @@ architecture rtl of EvrTxPDO is
       pdoDwAddr           => (others => '0'),
       pdoTrg              => '0',
       count               => COUNT_ZERO_C,
-      xferIdx             => 0
+      xferIdx             => 0,
+      trgCnt              => (others => '0')
    );
 
    function mkLan9254Addr(
@@ -254,6 +259,7 @@ begin
             v.xferIdx   := 0;
             if ( rBus.pdoTrg /= pdoTrgBus ) then
                v.state  := X_TS;
+               v.trgCnt := r.trgCnt + 1;
             end if;
 
          when X_TS =>
@@ -383,5 +389,7 @@ begin
 
    lanReq <= rBus.lanReq;
    busReq <= rBus.busReq;
+
+   trgCnt <= rBus.trgCnt;
 
 end architecture rtl;

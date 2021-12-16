@@ -1354,6 +1354,8 @@ begin
          signal eventCode      : std_logic_vector( 7 downto 0) := (others => '0');
          signal eventCodeVld   : std_logic                     := '0';
 
+         signal txPdoTrgCount  : unsigned(15 downto 0);
+
       begin
 
          P_SPI_MUX : process (
@@ -1701,7 +1703,9 @@ begin
                lanRep             => hbiMstRep(HBI_MIDX_PDO_C),
 
                busReq             => busMstReq(BUS_MIDX_PDO_C),
-               busRep             => busMstRep(BUS_MIDX_PDO_C)
+               busRep             => busMstRep(BUS_MIDX_PDO_C),
+
+               trgCnt             => txPdoTrgCount
             );
 
          U_EEP_CFG : entity work.EEPROMConfigurator
@@ -1799,9 +1803,9 @@ begin
                          end if;
 
                when 1 => v    :=           configReq.net.macAddr(31 downto  0);
-               when 2 => v    := x"0000" & configReq.net.macAddr(47 downto 32);
+               when 2 => v    := x"0000" & std_logic_vector( txPdoTrgCount );
                when 3 => v    :=           configReq.net.ip4Addr;
-               when 4 => v    := x"0000" & configReq.net.udpPort;
+               when 4 => v    := BUILD_INFO_C(BUILD_INFO_C'left downto BUILD_INFO_C'left - 32 + 1);
                when 5 => v    := configReq.esc.sm3Len & configReq.esc.sm2Len;
                when 6 => v(configRetries'range) := std_logic_vector(configRetries);
                when 7 => v    := configDebug;
