@@ -421,11 +421,11 @@ begin
               if bus_Req.be(2) = '1' then cs_min_time   (23 downto 16) <= bus_Req.data(23 downto 16); end if;
               if bus_Req.be(3) = '1' then cs_min_time   (31 downto 24) <= bus_Req.data(31 downto 24); end if;
             when X"5" & "0" => -- 0x28 (read-only)
+            when X"5" & "1" => -- 0x2c
               if bus_Req.be(0) = '1' then usr_control   ( 7 downto  0) <= bus_Req.data( 7 downto  0); end if;
               if bus_Req.be(1) = '1' then usr_control   (15 downto  8) <= bus_Req.data(15 downto  8); end if;
               if bus_Req.be(2) = '1' then usr_control   (23 downto 16) <= bus_Req.data(23 downto 16); end if;
               if bus_Req.be(3) = '1' then usr_control   (31 downto 24) <= bus_Req.data(31 downto 24); end if;
-            when X"5" & "1" => -- 0x2c
             when X"6" & "0" => -- 0x30
               if bus_Req.be(0) = '1' then lat_event_nr  ( 7 downto  0) <= bus_Req.data( 7 downto  0); end if;
               if bus_Req.be(1) = '1' then lat_arm                      <= bus_Req.data(           8);
