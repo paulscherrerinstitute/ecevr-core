@@ -1356,61 +1356,102 @@ begin
 
          signal txPdoTrgCount  : unsigned(15 downto 0);
 
+         signal s_spiIb        : ZynqSpiType;
+         signal s_fpga_o_05    : std_logic;
+         signal s_fpga_t_05    : std_logic;
+         signal s_fpga_o_10    : std_logic;
+         signal s_fpga_t_10    : std_logic;
+         signal s_fpga_o_15    : std_logic;
+         signal s_fpga_t_15    : std_logic;
+         signal s_fpga_o_40    : std_logic;
+         signal s_fpga_t_40    : std_logic;
+
       begin
 
+         -- work-around for an apparent Vivado bug: if we assign only to
+         -- a subset of signal array elements from a combinatorial process
+         -- then the default values of other elements are ignored:
+         --
+         --   signal foo : std_logic_vector(1 downto 0) := (others => '1');
+         --
+         --   process (x) is
+         --   begin
+         --     foo(0) <= x;
+         --   end process;
+         --
+         -- will have Vivado ignoring the '1' value for foo(1). Work around
+         -- this problem by using (scalar) intermediate signals :-(.
          P_SPI_MUX : process (
             spiSel, axiSel, spiOb, fpga_i,
             fpga_o_05, fpga_t_05, fpga_o_10, fpga_t_10,
             fpga_o_15, fpga_t_15, fpga_o_40, fpga_t_40,
-            lan9254_hbiOb
+            lan9254_hbiOb,
+            spiIb
          ) is
+            variable v_spiIb  : ZynqSpiType;
          begin
+            v_spiIb  := spiIb(0);
             if ( ( spiSel = '1' ) and ( axiSel = '0' ) ) then
-               fpga_o(10)    <= spiOb(0).o.mosi;
-               fpga_t(10)    <= spiOb(0).t.mosi;
-               spiIb(0).mosi <= fpga_i(10);
+               s_fpga_o_10   <= spiOb(0).o.mosi;
+               s_fpga_t_10   <= spiOb(0).t.mosi;
+               v_spiIb.mosi  := fpga_i(10);
                fpga_i_10     <= '0';
 
-               fpga_o(15)    <= spiOb(0).o.sclk;
-               fpga_t(15)    <= spiOb(0).t.sclk;
-               spiIb(0).sclk <= fpga_i(15);
+               s_fpga_o_15   <= spiOb(0).o.sclk;
+               s_fpga_t_15   <= spiOb(0).t.sclk;
+               v_spiIb.sclk  := fpga_i(15);
                fpga_i_15     <= '0';
 
-               fpga_o( 5)    <= spiOb(0).o.miso;
-               fpga_t( 5)    <= spiOb(0).t.miso;
-               spiIb(0).miso <= fpga_i( 5);
+               s_fpga_o_05   <= spiOb(0).o.miso;
+               s_fpga_t_05   <= spiOb(0).t.miso;
+               v_spiIb.miso  := fpga_i( 5);
                fpga_i_05     <= '0';
 
-               fpga_o(40)    <= spiOb(0).o_ss(1);
-               fpga_t(40)    <= '0';
+               s_fpga_o_40   <= spiOb(0).o_ss(1);
+               s_fpga_t_40   <= '0';
                fpga_i_40     <= '0';
 
                hbi_ad_t      <= '1';
                hbi_ob_t      <= '1';
             else
-               fpga_o(10)    <= fpga_o_10;
-               fpga_t(10)    <= fpga_t_10;
-               spiIb(0).mosi <= '1';
+               s_fpga_o_10   <= fpga_o_10;
+               s_fpga_t_10   <= fpga_t_10;
+               v_spiIb.mosi  := '1';
                fpga_i_10     <= fpga_i(10);
 
-               fpga_o(15)    <= fpga_o_15;
-               fpga_t(15)    <= fpga_t_15;
-               spiIb(0).sclk <= '1';
+               s_fpga_o_15   <= fpga_o_15;
+               s_fpga_t_15   <= fpga_t_15;
+               v_spiIb.sclk  := '1';
                fpga_i_15     <= fpga_i(15);
 
-               fpga_o( 5)    <= fpga_o_05;
-               fpga_t( 5)    <= fpga_t_05;
-               spiIb(0).miso <= '1';
+               s_fpga_o_05   <= fpga_o_05;
+               s_fpga_t_05   <= fpga_t_05;
+               v_spiIb.miso  := '1';
                fpga_i_05     <= fpga_i( 5);
 
-               fpga_o(40)    <= fpga_o_40;
-               fpga_t(40)    <= fpga_t_40;
+               s_fpga_o_40   <= fpga_o_40;
+               s_fpga_t_40   <= fpga_t_40;
                fpga_i_40     <= fpga_i(40);
 
                hbi_ad_t      <= lan9254_hbiOb.ad_t( 0);
                hbi_ob_t      <= '0';
             end if;
+            s_spiIb  <= v_spiIb;
          end process P_SPI_MUX;
+
+         spiIb(0)    <= s_spiIb;
+
+         fpga_o(10)  <= s_fpga_o_10;
+         fpga_t(10)  <= s_fpga_t_10;
+
+         fpga_o(15)  <= s_fpga_o_15;
+         fpga_t(15)  <= s_fpga_t_15;
+
+         fpga_o( 5)  <= s_fpga_o_05;
+         fpga_t( 5)  <= s_fpga_t_05;
+
+         fpga_o(40)  <= s_fpga_o_40;
+         fpga_t(40)  <= s_fpga_t_40;
 
          P_HBI_MUX : process (
             axiSel, axiHbiReq, escHbiReq, hbiRep
