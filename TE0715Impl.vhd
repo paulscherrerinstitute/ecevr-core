@@ -75,7 +75,8 @@ architecture top_level of TE0715 is
       variable prefix: string(0 to 6);
    begin
       prefix := part(part'left to part'left + 6);
-      return prefix = "XC7Z012" or prefix = "XC7Z015";
+      return    prefix = "XC7Z012" or prefix = "XC7Z015"
+             or prefix(prefix'left to prefix'left + 3) = "XC7A";
    end function isArtix;
 
    function numLed(var : string) return natural is
