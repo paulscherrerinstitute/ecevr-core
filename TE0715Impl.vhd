@@ -1776,7 +1776,7 @@ begin
                retries            => configRetries
             );
 
-         G_I2C_ILA : if ( false ) generate
+         G_I2C_ILA : if ( true ) generate
             signal clkdiv : unsigned(5 downto 0) := (others => '0');
             signal ilaClk : std_logic;
          begin
