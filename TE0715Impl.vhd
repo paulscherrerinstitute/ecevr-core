@@ -1635,7 +1635,7 @@ begin
                myAddrAck    => configAck.net,
 
                eepWriteReq  => eepWriteReq,
-               eepWriteReq  => eepWriteAck,
+               eepWriteAck  => eepWriteAck,
 
                escConfigReq => configReq.esc,
                escConfigAck => configAck.esc,
@@ -1767,7 +1767,7 @@ begin
                configReq          => configReq,
                configAck          => configAck,
                eepWriteReq        => eepWriteReq,
-               eepWriteReq        => eepWriteAck,
+               eepWriteAck        => eepWriteAck,
                dbufMaps           => dbufSegments,
 
                i2cAddr2BMode      => '0',
