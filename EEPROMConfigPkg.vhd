@@ -49,30 +49,6 @@ package EEPROMConfigPkg is
       evr320           => EVR320_CONFIG_ACK_ASSERT_C
    );
 
-   type EEPROMWriteWordReqType is record
-      waddr            : unsigned        (14 downto 0);
-      wdata            : std_logic_vector(15 downto 0);
-      valid            : std_logic;
-   end record EEPROMWriteWordReqtype;
-
-   constant EEPROM_WRITE_WORD_REQ_INIT_C : EEPROMWriteWordReqType := (
-      waddr            => (others => '0'),
-      wdata            => (others => '0'),
-      valid            => '0'
-   );
-
-   type EEPROMWriteWordAckType is record
-      ack              : std_logic;
-   end record EEPROMWriteWordAckType;
-
-   constant EEPROM_WRITE_WORD_ACK_INIT_C : EEPROMWriteWordAckType := (
-      ack              => '0'
-   );
-
-   constant EEPROM_WRITE_WORD_ACK_ASSERT_C : EEPROMWriteWordAckType := (
-      ack              => '1'
-   );
-
    function toSlv08Array(constant x : in EEPROMConfigReqType)
       return Slv08Array;
 

@@ -1179,6 +1179,8 @@ begin
 
       signal configReq      : EEPROMConfigReqType;
       signal configAck      : EEPROMConfigAckType := EEPROM_CONFIG_ACK_ASSERT_C;
+      signal eepWriteReq    : EEPROMWriteWordReqType;
+      signal eepWriteAck    : EEPROMWriteWordAckType;
       signal dbufSegments   : MemXferArray(MAX_TXPDO_SEGMENTS_C - 1 downto 0);
       signal configRetries  : unsigned(3 downto 0);
       signal configRstR     : std_logic := '0';
@@ -1632,6 +1634,9 @@ begin
                myAddr       => configReq.net,
                myAddrAck    => configAck.net,
 
+               eepWriteReq  => eepWriteReq,
+               eepWriteReq  => eepWriteAck,
+
                escConfigReq => configReq.esc,
                escConfigAck => configAck.esc,
 
@@ -1761,6 +1766,8 @@ begin
 
                configReq          => configReq,
                configAck          => configAck,
+               eepWriteReq        => eepWriteReq,
+               eepWriteReq        => eepWriteAck,
                dbufMaps           => dbufSegments,
 
                i2cAddr2BMode      => '0',
