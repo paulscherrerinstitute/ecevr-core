@@ -52,6 +52,9 @@ entity EEPROMConfigurator is
                                                  -- assert if eeprom used 2 address bytes
                                                  -- (>= 32kbit devices).
 
+      eepWriteReq        : in  EEPROMWriteWordReqType := EEPROM_WRITE_WORD_REQ_INIT_C;
+      eepWriteAck        : out EEPROMWriteWordAckType;
+
       i2cSclInp          : in  std_logic := '1';
       i2cSclOut          : out std_logic;
       i2cSclHiZ          : out std_logic;
@@ -119,7 +122,7 @@ architecture rtl of EEPROMConfigurator is
       return noStop & std_logic_vector(count) & a & op;
    end function i2cHeader;
 
-   type StateType is (START, ADDR, ADDR_RESP, READ, RCV, STORE_UPPER, DRAIN, CHECK, DONE);
+   type StateType is (START, ADDR, ADDR_RESP, READ, RCV, STORE_UPPER, DRAIN, CHECK, DONE, I2C_WRA, I2C_WRD);
 
    type RegType is record
       state     : StateType;
@@ -154,6 +157,7 @@ architecture rtl of EEPROMConfigurator is
       cfgFound  : boolean;
       retries   : unsigned( 3 downto 0);
       catsFound : natural range 0 to MAX_CATS_C;
+      eepWrAck  : EEPROMWriteWordAckType;
    end record RegType;
 
    constant REG_INIT_C : RegType := (
@@ -188,7 +192,8 @@ architecture rtl of EEPROMConfigurator is
       catDone   => (EEPROM_OFFSET_G /= 0),
       cfgFound  => false,
       retries   => (others => '0'),
-      catsFound => 0
+      catsFound => 0,
+      eepWrAck  => EEPROM_WRITE_WORD_ACK_INIT_C
    );
 
    procedure storeByte(
@@ -263,15 +268,17 @@ begin
       configReqLoc.txPDO.numMaps  <= r.nMaps;
    end process P_MAP;
 
-   P_COMB : process ( r, configReqLoc, configAck, strmTxRdy, strmRxMst, i2cAddr2BMode ) is
-      variable v   : RegType;
-      variable a2b : std_logic;
+   P_COMB : process ( r, configReqLoc, configAck, strmTxRdy, strmRxMst, i2cAddr2BMode, eepWriteReq ) is
+      variable v     : RegType;
+      variable a2b   : std_logic;
+      variable baddr : unsigned(15 downto 0);
    begin
 
       v := r;
 
       -- abbreviation
-      a2b := i2cAddr2BMode;
+      a2b   := i2cAddr2BMode;
+      baddr := (eepWriteReq.waddr & '0');
 
       -- ack flags
       if ( ( r.strmTxMst.valid and strmTxRdy ) = '1' ) then
@@ -294,6 +301,7 @@ begin
          v.evrCfgVld := '0';
       end if;
 
+      v.eepWrAck.ack := '0';
 
       v.retState := r.state;
 
@@ -412,7 +420,41 @@ begin
             v.cnt := r.cnt + 1;
 
          when DONE =>
-            -- do nothing
+            if ( r.strmRxRdy = '1' ) then
+               if ( strmRxMst.valid = '1' ) then
+                  v.strmRxRdy    := '0';
+                  v.eepWrAck.ack := '1';
+               end if;
+            elsif ( ( eepWriteReq.valid and not r.eepWrAck.ack ) = '1' ) then
+               v.strmTxMst.data  := i2cHeader( a2b, I2C_WR_C, noStop => GEN_STOP_C, addr => baddr );
+               v.strmTxMst.last  := '0';
+               v.strmTxMst.ben   := "11";
+               v.strmTxMst.valid := '1';
+               v.state           := I2C_WRA;
+            end if;
+
+         when I2C_WRA =>
+            if ( strmTxRdy = '1' ) then
+               if ( i2cAddr2BMode = '1' ) then
+                  -- address is expected as big-endian
+                  v.strmTxMst.data             := std_logic_vector( bswap( baddr ) );
+               else
+                  v.strmTxMst.data(7 downto 0) := std_logic_vector( baddr(7 downto 0) );
+                  v.strmTxMst.ben(1)           := '0';
+               end if;
+               v.strmTxMst.valid := '1';
+               v.state           := I2C_WRD;
+            end if;
+
+         when I2C_WRD =>
+            if ( strmTxRdy = '1' ) then
+               v.strmTxMst.data  := eepWriteReq.wdata;
+               v.strmTxMst.ben   := "11";
+               v.strmTxMst.last  := '1';
+               v.strmTxMst.valid := '1';
+               v.strmRxRdy       := '1';
+               v.state           := DONE;
+            end if;
 
          when ADDR =>
             -- send EEPROM read address
@@ -570,10 +612,12 @@ begin
          i2c_sda_t      => i2cSdaHiZ
       );
 
-   dbufMaps  <= r.maps;
-   configReq <= configReqLoc;
+   dbufMaps    <= r.maps;
+   configReq   <= configReqLoc;
 
-   retries   <= r.retries;
+   retries     <= r.retries;
+
+   eepWriteAck <= r.eepWrAck;
 
    debug(31 downto 4) <= (others => '0');
    debug( 3 downto 0) <= std_logic_vector( to_unsigned( StateType'pos( r.state ), 4 ) );

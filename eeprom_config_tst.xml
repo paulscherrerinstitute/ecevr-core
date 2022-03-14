@@ -1,0 +1,100 @@
+<?xml version='1.0' encoding='ASCII'?>
+<EtherCATInfo>
+  <Vendor>
+    <Id>#x505349</Id>
+    <Name>Paul Scherrer Institut</Name>
+  </Vendor>
+  <Descriptions>
+    <Groups>
+      <Group>
+        <Type>Lan9254</Type>
+        <Name>Lan9254</Name>
+      </Group>
+    </Groups>
+    <Devices>
+      <Device Physics="YY">
+        <Type ProductCode="0001" RevisionNo="0001">Lan9254</Type>
+        <Name>EcEVR</Name>
+        <GroupType>Lan9254</GroupType>
+        <Fmmu>Outputs</Fmmu>
+        <Fmmu>Inputs</Fmmu>
+        <Fmmu>MBoxState</Fmmu>
+        <Sm ControlByte="#x26" StartAddress="#x1000" DefaultSize="80" Enable="1">MBoxOut</Sm>
+        <Sm ControlByte="#x22" StartAddress="#x1080" DefaultSize="80" Enable="1">MBoxIn</Sm>
+        <Sm ControlByte="#x24" StartAddress="#x1100" DefaultSize="3" Enable="1">Outputs</Sm>
+        <Sm ControlByte="#x20" StartAddress="#x1180" DefaultSize="16" Enable="1">Inputs</Sm>
+        <RxPdo Fixed="1" Mandatory="1" Sm="2">
+          <Index>#x1600</Index>
+          <Name>ECAT EVR RxData</Name>
+          <Entry Fixed="1">
+            <Index>#x2000</Index>
+            <SubIndex>#x01</SubIndex>
+            <BitLen>8</BitLen>
+            <Name>LED[1]</Name>
+            <DataType>USINT</DataType>
+          </Entry>
+          <Entry Fixed="1">
+            <Index>#x2000</Index>
+            <SubIndex>#x02</SubIndex>
+            <BitLen>8</BitLen>
+            <Name>LED[2]</Name>
+            <DataType>USINT</DataType>
+          </Entry>
+          <Entry Fixed="1">
+            <Index>#x2000</Index>
+            <SubIndex>#x03</SubIndex>
+            <BitLen>8</BitLen>
+            <Name>LED[3]</Name>
+            <DataType>USINT</DataType>
+          </Entry>
+        </RxPdo>
+        <TxPdo Fixed="1" Mandatory="1" Sm="3">
+          <Index>#x1a00</Index>
+          <Name>ECAT EVR TxData</Name>
+          <Entry Fixed="1">
+            <Index>#x6000</Index>
+            <SubIndex>#x01</SubIndex>
+            <BitLen>32</BitLen>
+            <Name>TimestampLo</Name>
+            <DataType>UDINT</DataType>
+          </Entry>
+          <Entry Fixed="1">
+            <Index>#x6001</Index>
+            <SubIndex>#x01</SubIndex>
+            <BitLen>32</BitLen>
+            <Name>TimestampHi</Name>
+            <DataType>UDINT</DataType>
+          </Entry>
+          <Entry Fixed="1">
+            <Index>#x5000</Index>
+            <SubIndex>#x01</SubIndex>
+            <BitLen>32</BitLen>
+            <Name>foo</Name>
+            <DataType>UDINT</DataType>
+          </Entry>
+          <Entry Fixed="1">
+            <Index>#x5001</Index>
+            <SubIndex>#x01</SubIndex>
+            <BitLen>32</BitLen>
+            <Name>bar</Name>
+            <DataType>UDINT</DataType>
+          </Entry>
+        </TxPdo>
+        <Mailbox DataLinkLayer="1">
+          <EoE IP="1" MAC="1"/>
+        </Mailbox>
+        <Eeprom AssignToPdi="1">
+          <ByteSize>2048</ByteSize>
+          <ConfigData>91020144000000000000004000002b00</ConfigData>
+          <Category>
+            <CatNo>1</CatNo>
+            <Data>01aabbccddeeffffffffffffff0404000080000000000004000000000000000004000000000000000004000000000000000011223344010102000000</Data>
+          </Category>
+          <VendorSpecific>
+            <Segment Swap8="0">seg1</Segment>
+          </VendorSpecific>
+        </Eeprom>
+      </Device>
+    </Devices>
+  </Descriptions>
+</EtherCATInfo>

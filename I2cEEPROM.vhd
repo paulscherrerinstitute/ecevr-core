@@ -1,6 +1,7 @@
 library ieee;
 use     ieee.std_logic_1164.all;
 use     ieee.numeric_std.all;
+use     ieee.math_real.all;
 
 -- mostly for simulation purposes; no sophisticated de-bouncing nor
 -- delays that ensure setup/hold times.
@@ -27,10 +28,32 @@ architecture rtl of I2CEEPROM is
 
    function ADDR_W_F return natural is
    begin
-      if ( SIZE_BYTES_G <= 256 ) then return 8; else return 16; end if;
+      if ( SIZE_BYTES_G <= 2048 ) then return 8; else return 16; end if;
    end function ADDR_W_F;
 
-   subtype AddrType     is unsigned(ADDR_W_F - 1 downto 0);
+   function aBits return integer is
+   begin
+      if    ( SIZE_BYTES_G <= 256  ) then
+         return 0;
+      elsif ( SIZE_BYTES_G <= 512  ) then
+         return 1;
+      elsif ( SIZE_BYTES_G <= 1024 ) then
+         return 2;
+      elsif ( SIZE_BYTES_G <= 2048 ) then
+         return 3;
+      else
+         return 0;
+      end if;
+   end function aBits;
+
+   function addrMatch(constant x : std_logic_vector(7 downto 0)) return boolean is
+   begin
+      return ( x(7 downto aBits) = I2C_ADDR_G(7 downto aBits) );
+   end function addrMatch;
+
+   constant ADDR_BITS_C : natural := integer( floor( log2( real(SIZE_BYTES_G * 8) ) ) ) + 1;
+
+   subtype AddrType     is unsigned(ADDR_BITS_C - 1 downto 0);
 
    type    Slv8Array    is array(natural range <>) of std_logic_vector(7 downto 0);
 
@@ -118,11 +141,17 @@ begin
             -- check address and ACK/NACK accordingly
             v.bitCount := 0;
             v.state    := SFHL; -- shift ACK bit
-            if ( ('0' & r.sr(7 downto 1)) /= I2C_ADDR_G ) then
+            if ( not addrMatch('0' & r.sr(7 downto 1)) ) then
                -- shift the ACK bit
                v.sr(v.sr'left) := '1'; -- NAK
                v.retState      := IDLE;
             else
+               if ( r.sr(0) = '0' ) then
+                  v.addr(ADDR_BITS_C - 1 downto 8) := (others => '0');
+                  if ( aBits > 0 ) then
+                    v.addr(8+aBits - 1 downto 8) := unsigned(r.sr(aBits downto 1));
+                  end if;
+               end if;
                v.dirRead := ( r.sr(0) = '1' );
                v.sr(v.sr'left) := '0'; -- ACK
 
