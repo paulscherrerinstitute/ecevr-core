@@ -263,7 +263,7 @@ begin
             end if;
 
          when X_TS =>
-            if ( config.hasTs /= '0' ) then
+            if ( (config.valid and config.hasTs) /= '0' ) then
                v.state  := WRITE_PDO;
                v.count  := rBus.count + 1;
                write32( v.lanReq, lanRep, rBus.pdoDwAddr, tsArray( to_integer( rBus.count ) ) );
@@ -278,7 +278,7 @@ begin
             end if;
 
          when X_EV =>
-            if ( ( NUM_EVENT_DWORDS_G > 0 ) and ( config.hasEventCodes /= '0' ) ) then
+            if ( ( NUM_EVENT_DWORDS_G > 0 ) and ( (config.valid and config.hasEventCodes) /= '0' ) ) then
                v.state  := WRITE_PDO;
                v.count  := rBus.count + 1;
                write32( v.lanReq, lanRep, rBus.pdoDwAddr, ecArray( to_integer( rBus.count ) ) );
@@ -293,7 +293,7 @@ begin
             end if;
 
          when X_DC_LATCH =>
-            if ( hasLatch /= "0000" ) then
+            if ( (config.valid = '1') and (hasLatch /= "0000") ) then
                v.count       := rBus.count + 1;
                -- is this the last transfer?
                if ( rBus.count = 2*hasLatch'length - 1 ) then
@@ -319,7 +319,7 @@ begin
             end if;
 
          when X_MEM =>
-            if ( rBus.xferIdx < config.numMaps ) then
+            if ( (config.valid = '1') and (rBus.xferIdx < config.numMaps) ) then
                v.busReq.be    := (others => '1');
                v.busReq.rdnwr := '1';
                v.busReq.valid := '1';

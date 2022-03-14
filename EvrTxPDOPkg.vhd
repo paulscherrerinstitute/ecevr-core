@@ -39,6 +39,7 @@ package EvrTxPDOPkg is
       hasLatch1P          : std_logic;
       hasLatch1N          : std_logic;
       numMaps             : MemXferNumType;
+      valid               : std_logic;
    end record EvrTxPDOConfigType;
 
    constant EVR_TXPDO_CONFIG_INIT_C : EvrTxPDOConfigType := (
@@ -48,7 +49,8 @@ package EvrTxPDOPkg is
       hasLatch0N          => '1',
       hasLatch1P          => '1',
       hasLatch1N          => '1',
-      numMaps             =>  0
+      numMaps             =>  0,
+      valid               => '0'
    );
 
    function toSlv08Array(constant x : in MemXferType)
@@ -90,7 +92,8 @@ package body EvrTxPDOPkg is
          hasLatch0N          => x(0+x'low)(3),
          hasLatch1P          => x(0+x'low)(4),
          hasLatch1N          => x(0+x'low)(5),
-         numMaps             => to_integer( unsigned( x(1+x'low) ) )
+         numMaps             => to_integer( unsigned( x(1+x'low) ) ),
+         valid               => '0'
       );
    begin
       return c;

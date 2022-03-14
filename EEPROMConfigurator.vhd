@@ -52,6 +52,8 @@ entity EEPROMConfigurator is
                                                  -- assert if eeprom used 2 address bytes
                                                  -- (>= 32kbit devices).
 
+      emulActive         : in  std_logic := '0';
+
       eepWriteReq        : in  EEPROMWriteWordReqType := EEPROM_WRITE_WORD_REQ_INIT_C;
       eepWriteAck        : out EEPROMWriteWordAckType;
 
@@ -122,7 +124,7 @@ architecture rtl of EEPROMConfigurator is
       return noStop & std_logic_vector(count) & a & op;
    end function i2cHeader;
 
-   type StateType is (START, ADDR, ADDR_RESP, READ, RCV, STORE_UPPER, DRAIN, CHECK, DONE, I2C_WRA, I2C_WRD);
+   type StateType is (INIT, START, ADDR, ADDR_RESP, READ, RCV, STORE_UPPER, DRAIN, CHECK, DONE, I2C_WRA, I2C_WRD);
 
    type RegType is record
       state     : StateType;
@@ -138,6 +140,7 @@ architecture rtl of EEPROMConfigurator is
       ip4Vld    : std_logic;
       udpVld    : std_logic;
       evrCfgVld : std_logic;
+      txPdoVld  : std_logic;
       wrp       : natural range 0 to CFG_LEN_C; -- CFG_LEN_C - 1 would suffice but v.wrp := r.wrp + 1
       lwrp      : natural range 0 to CFG_LEN_C; -- fails simulation even if OOR value is never used later.
       wcnt      : natural range 0 to PROM_LEN_C;
@@ -161,8 +164,8 @@ architecture rtl of EEPROMConfigurator is
    end record RegType;
 
    constant REG_INIT_C : RegType := (
-      state     => START,
-      retState  => START,
+      state     => INIT,
+      retState  => INIT,
       strmTxMst => LAN9254STRM_MST_INIT_C,
       smCfg     => ESC_CONFIG_REQ_NULL_C,
       smCfg32   => "00",
@@ -174,6 +177,7 @@ architecture rtl of EEPROMConfigurator is
       ip4Vld    => '0',
       udpVld    => '0',
       evrCfgVld => '0',
+      txPdoVld  => '0',
       wrp       =>  0,
       lwrp      =>  0,
       wcnt      =>  0,
@@ -266,9 +270,10 @@ begin
       configReqLoc.net.udpPortVld <= r.udpVld;
       configReqLoc.evr320.req     <= r.evrCfgVld;
       configReqLoc.txPDO.numMaps  <= r.nMaps;
+      configReqLoc.txPDO.valid    <= r.txPdoVld;
    end process P_MAP;
 
-   P_COMB : process ( r, configReqLoc, configAck, strmTxRdy, strmRxMst, i2cAddr2BMode, eepWriteReq ) is
+   P_COMB : process ( r, configReqLoc, configAck, strmTxRdy, strmRxMst, i2cAddr2BMode, eepWriteReq, emulActive ) is
       variable v     : RegType;
       variable a2b   : std_logic;
       variable baddr : unsigned(15 downto 0);
@@ -306,6 +311,16 @@ begin
       v.retState := r.state;
 
       case ( r.state ) is
+         when INIT  =>
+            if ( emulActive = '1' ) then
+               v.state := DONE; 
+               -- we don't support reading the real emulated eeprom contents;
+               -- just supply the hard-coded SM defaults.
+               v.smCfg := ESC_CONFIG_REQ_INIT_C;
+            else
+               v.state := START;
+            end if;
+
          when START =>
             v.lwcnt     := r.wcnt;
             v.lwrp      := r.wrp;
@@ -416,6 +431,7 @@ begin
                -- let the ESC start
                v.smCfg.valid   := '1';
                v.evrCfgVld     := versionMatch( r );
+               v.txPdoVld      := '1';
             end if;
             v.cnt := r.cnt + 1;
 

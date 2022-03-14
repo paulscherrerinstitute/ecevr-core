@@ -1187,6 +1187,8 @@ begin
       signal configRstRIn   : std_logic;
       signal configRst      : std_logic;
       signal configDebug    : std_logic_vector(31 downto 0);
+      signal configInit     : std_logic;
+      signal eepEmulActive  : std_logic;
 
 begin
 
@@ -1622,43 +1624,46 @@ begin
                DISABLE_TXPDO_G       => true
             )
             port map (
-               clk          => sysClk,
-               rst          => escRst,
+               clk             => sysClk,
+               rst             => escRst,
 
-               escState     => escState,
-               debug        => axilIlaSpare2,
+               configRst       => configInit,
 
-               req          => escHbiReq,
-               rep          => escHbiRep,
+               escState        => escState,
+               debug           => axilIlaSpare2,
 
-               myAddr       => configReq.net,
-               myAddrAck    => configAck.net,
+               req             => escHbiReq,
+               rep             => escHbiRep,
 
-               eepWriteReq  => eepWriteReq,
-               eepWriteAck  => eepWriteAck,
+               myAddr          => configReq.net,
+               myAddrAck       => configAck.net,
 
-               escConfigReq => configReq.esc,
-               escConfigAck => configAck.esc,
+               eepWriteReq     => eepWriteReq,
+               eepWriteAck     => eepWriteAck,
+               eepEmulActive   => eepEmulActive,
 
-               extHBIReq    => hbiMstReq,
-               extHBIRep    => hbiMstRep,
+               escConfigReq    => configReq.esc,
+               escConfigAck    => configAck.esc,
 
-               busMstReq    => busMstReq,
-               busMstRep    => busMstRep,
+               extHBIReq       => hbiMstReq,
+               extHBIRep       => hbiMstRep,
 
-               busSubReq    => busSubReq,
-               busSubRep    => busSubRep,
+               busMstReq       => busMstReq,
+               busMstRep       => busMstRep,
 
-               txPDOMst     => open,
-               txPDORdy     => open,
+               busSubReq       => busSubReq,
+               busSubRep       => busSubRep,
 
-               rxPDOMst     => rxPDOMst,
-               rxPDORdy     => rxPDORdy,
+               txPDOMst        => open,
+               txPDORdy        => open,
 
-               irq          => lan9254_irq,
+               rxPDOMst        => rxPDOMst,
+               rxPDORdy        => rxPDORdy,
 
-               testFailed   => testFailed,
-               stats        => escStats
+               irq             => lan9254_irq,
+
+               testFailed      => testFailed,
+               stats           => escStats
             );
 
          U_EVR : entity work.evr320_udp2bus_wrapper
@@ -1810,7 +1815,7 @@ begin
                );
          end generate G_I2C_ILA;
 
-         configRst <= escRst or configRstR or eepRst;
+         configRst <= escRst or configRstR or eepRst or configInit;
 
          P_CFG_SEQ : process ( sysClk ) is
          begin
