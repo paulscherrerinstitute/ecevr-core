@@ -1627,7 +1627,7 @@ begin
                clk             => sysClk,
                rst             => escRst,
 
-               configRst       => configInit,
+               configRstReq    => configInit,
 
                escState        => escState,
                debug           => axilIlaSpare2,
