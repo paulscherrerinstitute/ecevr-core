@@ -436,12 +436,7 @@ begin
             v.cnt := r.cnt + 1;
 
          when DONE =>
-            if ( r.strmRxRdy = '1' ) then
-               if ( strmRxMst.valid = '1' ) then
-                  v.strmRxRdy    := '0';
-                  v.eepWrAck.ack := '1';
-               end if;
-            elsif ( ( eepWriteReq.valid and not r.eepWrAck.ack ) = '1' ) then
+            if ( eepWriteReq.valid ) then
                v.strmTxMst.data  := i2cHeader( a2b, I2C_WR_C, noStop => GEN_STOP_C, addr => baddr );
                v.strmTxMst.last  := '0';
                v.strmTxMst.ben   := "11";
@@ -463,13 +458,22 @@ begin
             end if;
 
          when I2C_WRD =>
-            if ( strmTxRdy = '1' ) then
+            if ( r.strmRxRdy = '1' ) then
+               if ( strmRxMst.valid = '1' ) then
+                  -- reply from I2C master arrived; ready
+                  -- to accept the next command.
+                  -- Assume the last TX transaction is accepted
+                  -- before we receive this reply.
+                  v.strmRxRdy    := '0';
+                  v.state        := DONE;
+               end if;
+            elsif ( strmTxRdy = '1' ) then
                v.strmTxMst.data  := eepWriteReq.wdata;
                v.strmTxMst.ben   := "11";
                v.strmTxMst.last  := '1';
                v.strmTxMst.valid := '1';
                v.strmRxRdy       := '1';
-               v.state           := DONE;
+               v.eepWrAck.ackk   := '1';
             end if;
 
          when ADDR =>
