@@ -473,7 +473,7 @@ begin
                v.strmTxMst.last  := '1';
                v.strmTxMst.valid := '1';
                v.strmRxRdy       := '1';
-               v.eepWrAck.ackk   := '1';
+               v.eepWrAck.ack    := '1';
             end if;
 
          when ADDR =>
