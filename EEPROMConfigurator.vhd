@@ -436,7 +436,7 @@ begin
             v.cnt := r.cnt + 1;
 
          when DONE =>
-            if ( eepWriteReq.valid ) then
+            if ( eepWriteReq.valid = '1' ) then
                v.strmTxMst.data  := i2cHeader( a2b, I2C_WR_C, noStop => GEN_STOP_C, addr => baddr );
                v.strmTxMst.last  := '0';
                v.strmTxMst.ben   := "11";
