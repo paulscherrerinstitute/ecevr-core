@@ -331,6 +331,7 @@ begin
       eepWriteReq        => eepWriteReq,
       eepWriteAck        => eepWriteAck,
       dbufMaps           => dbufSegments,
+      emulActive         => eepEmulActive,
 
       i2cAddr2BMode      => '0',
 
