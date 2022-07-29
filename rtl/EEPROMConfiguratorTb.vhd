@@ -4,10 +4,15 @@ use     ieee.numeric_std.all;
 
 use     work.ESCBasicTypesPkg.all;
 use     work.Lan9254Pkg.all;
+use     work.Lan9254ESCPkg.all;
+use     work.IPAddrConfigPkg.all;
 use     work.EEPROMConfigPkg.all;
 use     work.EvrTxPDOPkg.all;
+use     work.EEPROMContentPkg.all;
+use     work.Evr320ConfigPkg.all;
 
 entity EEPROMConfiguratorTb is
+   generic( EMUL_ACTIVE_G : std_logic := '0' );
 end entity EEPROMConfiguratorTb;
 
 architecture sim of EEPROMConfiguratorTb is
@@ -904,7 +909,25 @@ architecture sim of EEPROMConfiguratorTb is
       others => x"ff"
    );
 
-   constant EEPROM_INIT_C : Slv08Array := EEPROM_INIT_2_C;
+   function fillEEPROM return Slv08Array is
+      variable v : Slv08Array(SIZE_BYTES_C - 1 downto 0);
+      variable i : integer;
+   begin
+      for i in 0 to SIZE_BYTES_C/2 - 1 loop
+         if ( i <  EEPROM_INIT_C'length ) then
+            v(2*i + 0) := EEPROM_INIT_C(i)( 7 downto 0);
+            v(2*i + 1) := EEPROM_INIT_C(i)(15 downto 8);
+         else
+            v(2*i + 0) := x"FF";
+            v(2*i + 1) := x"FF";
+         end if;
+      end loop;
+      return v;
+   end function fillEEPROM;
+
+   constant EEPROM_CONFIGURED_C : Slv08Array(SIZE_BYTES_C - 1 downto 0) := fillEEPROM;
+
+   constant EEPROM_8_INIT_C : Slv08Array := EEPROM_CONFIGURED_C;
 
    signal wrReq : EEPROMWriteWordReqType := (
       waddr => to_unsigned(16, 15),
@@ -960,7 +983,21 @@ begin
                                                 & " : swp " & toString( dbufMaps(j).swp )
                                                 & " : num " & toString( dbufMaps(j).num );
             end loop;
-            report "DONE";
+         end if;
+         if ( cfg.evr320.req = '1' ) then
+            report "EVR320: ";
+            report "  Pulse Generators:";
+            for j in cfg.evr320.pulseGenParams'range loop
+              report "    [" & integer'image(j) & "]:";
+              report "      Width: " & integer'image(to_integer(unsigned(cfg.evr320.pulseGenParams(j).pulseWidth)));
+              report "      Delay: " & integer'image(to_integer(unsigned(cfg.evr320.pulseGenParams(j).pulseDelay)));
+              report "      Event: " & integer'image(to_integer(unsigned(cfg.evr320.pulseGenParams(j).pulseEvent)));
+              report "      Enable:" & std_logic'image(cfg.evr320.pulseGenParams(j).pulseEnbld);
+            end loop;
+            report "  Extra Events:";
+            for j in 0 to NUM_EXTRA_EVENTS_C - 1 loop
+               report "    [" & integer'image(j) & "]: " & integer'image(to_integer(unsigned(cfg.evr320.extraEvents(j))));
+            end loop;
          end if;
          if ( wrAck.ack = '1' ) then
             run <= false;
@@ -972,7 +1009,7 @@ begin
    U_EEP : entity work.I2CEEPROM
       generic map (
          SIZE_BYTES_G  => SIZE_BYTES_C,
-         EEPROM_INIT_G => toSlv( EEPROM_INIT_C ),
+         EEPROM_INIT_G => toSlv( EEPROM_8_INIT_C ),
          I2C_ADDR_G    => "01010000"
       )
       port map (
@@ -994,7 +1031,8 @@ begin
          EEPROM_OFFSET_G            => 0, --128,
          EEPROM_SIZE_G              => (8*SIZE_BYTES_C),
          MAX_TXPDO_MAPS_G           => MAX_TXPDO_MAPS_C,
-         I2C_ADDR_G                 => "1010000"
+         I2C_ADDR_G                 => "1010000",
+         GEN_ILA_G                  => false
       )
       port map (
          clk             => clk,
@@ -1006,6 +1044,8 @@ begin
 
          eepWriteReq     => wrReq,
          eepWriteAck     => wrAck,
+
+         emulActive      => EMUL_ACTIVE_G,
 
          i2cSclInp       => scl,
          i2cSclOut       => scl_m_o,

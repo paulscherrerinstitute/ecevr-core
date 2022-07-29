@@ -9,6 +9,7 @@ use work.IPAddrConfigPkg.all;
 use work.EvrTxPDOPkg.all;
 use work.Evr320ConfigPkg.all;
 use work.EEPROMConfigPkg.all;
+use work.EEPROMContentPkg.all;
 
 use work.IlaWrappersPkg.all;
 
@@ -36,7 +37,8 @@ entity EEPROMConfigurator is
                                                -- 1- vs. 2-byte addressing can be switched
                                                -- dynamically.
       I2C_ADDR_G         : std_logic_vector(6 downto 0) := "1010000";
-      GEN_ILA_G          : boolean := true
+      GEN_ILA_G          : boolean := true;
+      GEN_I2CSTRM_ILA_G  : boolean := true
    );
    port (
       clk                : in  std_logic;
@@ -124,7 +126,7 @@ architecture rtl of EEPROMConfigurator is
       return noStop & std_logic_vector(count) & a & op;
    end function i2cHeader;
 
-   type StateType is (INIT, START, ADDR, ADDR_RESP, READ, RCV, STORE_UPPER, DRAIN, CHECK, DONE, I2C_WRA, I2C_WRD);
+   type StateType is (INIT, START, REMU, ADDR, ADDR_RESP, READ, RCV, STORE_UPPER, DRAIN, CHECK, DONE, I2C_WRA, I2C_WRD);
 
    type RegType is record
       state     : StateType;
@@ -230,6 +232,16 @@ architecture rtl of EEPROMConfigurator is
 
    end procedure storeByte;
 
+   function readEmul(constant r : in RegType) return std_logic_vector is
+      constant waddr : natural := to_integer(r.eepAddr(r.eepAddr'left downto 1));
+   begin
+      if ( r.eepAddr(0) = '1' ) then
+         return EEPROM_INIT_C(waddr)(15 downto 8);
+      else
+         return EEPROM_INIT_C(waddr)( 7 downto 0);
+      end if;
+   end function readEmul;
+
    function toU16(
       constant x : in Slv08Array;
       constant i : in natural
@@ -312,14 +324,7 @@ begin
 
       case ( r.state ) is
          when INIT  =>
-            if ( emulActive = '1' ) then
-               v.state := DONE; 
-               -- we don't support reading the real emulated eeprom contents;
-               -- just supply the hard-coded SM defaults.
-               v.smCfg := ESC_CONFIG_REQ_INIT_C;
-            else
-               v.state := START;
-            end if;
+            v.state := START;
 
          when START =>
             v.lwcnt     := r.wcnt;
@@ -336,11 +341,15 @@ begin
                   v.cnt := to_unsigned(r.eepEnd - r.wcnt, v.cnt'length);
                end if;
                v.eepNext         := r.eepAddr + v.cnt + 1;
-               v.strmTxMst.last  := '0';
-               v.strmTxMst.data  := i2cHeader( a2b, I2C_WR_C, noStop => NO_STOP_C, addr => r.eepAddr );
-               v.strmTxMst.ben   := "11";
-               v.strmTxMst.valid := '1';
-               v.state           := ADDR;
+               if ( emulActive = '0' ) then
+                 v.strmTxMst.last  := '0';
+                 v.strmTxMst.data  := i2cHeader( a2b, I2C_WR_C, noStop => NO_STOP_C, addr => r.eepAddr );
+                 v.strmTxMst.ben   := "11";
+                 v.strmTxMst.valid := '1';
+                 v.state           := ADDR;
+               else
+                 v.state           := REMU;
+               end if;
             elsif ( r.smCfg32 /= "00" ) then
                -- store sync manager info
                v.wcnt := 0;
@@ -434,6 +443,15 @@ begin
                v.txPdoVld      := '1';
             end if;
             v.cnt := r.cnt + 1;
+
+         when REMU =>
+            storeByte( v, r, readEmul( r ) );
+            if ( r.cnt = 0 ) then
+               v.state   := START;
+               v.eepAddr := r.eepNext;
+            else
+               v.eepAddr := r.eepAddr + 1;
+            end if;
 
          when DONE =>
             if ( eepWriteReq.valid = '1' ) then
@@ -611,7 +629,8 @@ begin
          CLOCK_FREQ_G   => CLOCK_FREQ_G,
          I2C_FREQ_G     => I2C_FREQ_G,
          BUSY_TIMEOUT_G => I2C_BUSY_TIMEOUT_G,
-         CMD_TIMEOUT_G  => I2C_CMD_TIMEOUT_G
+         CMD_TIMEOUT_G  => I2C_CMD_TIMEOUT_G,
+         GEN_ILA_G      => GEN_I2CSTRM_ILA_G
       )
       port map (
          clk            => clk,
