@@ -138,6 +138,8 @@ architecture Impl of EcEvrWrapper is
 
   signal txPdoTrgCount  : unsigned(15 downto 0);
 
+  signal eepEmulActLoc  : std_logic;
+
 begin
 
   P_HBI_MUX : process (
@@ -197,7 +199,7 @@ begin
 
       eepWriteReq     => eepWriteReq,
       eepWriteAck     => eepWriteAck,
-      eepEmulActive   => eepEmulActive,
+      eepEmulActive   => eepEmulActLoc,
 
       escConfigReq    => configReq.esc,
       escConfigAck    => configAck.esc,
@@ -331,7 +333,7 @@ begin
       eepWriteReq        => eepWriteReq,
       eepWriteAck        => eepWriteAck,
       dbufMaps           => dbufSegments,
-      emulActive         => eepEmulActive,
+      emulActive         => eepEmulActLoc,
 
       i2cAddr2BMode      => '0',
 
@@ -431,11 +433,13 @@ begin
     busSubRep(BUS_SIDX_LOC_C).rdata <= v;
   end process P_DIAG;
 
-  i2c_scl_t(0) <= eeprom_scl_t;
-  i2c_scl_o(0) <= eeprom_scl_o;
-  eeprom_scl_i <= i2c_scl_i(0);
-  i2c_sda_t(0) <= eeprom_sda_t;
-  i2c_sda_o(0) <= eeprom_sda_o;
-  eeprom_sda_i <= i2c_sda_i(0);
+  i2c_scl_t(0)  <= eeprom_scl_t;
+  i2c_scl_o(0)  <= eeprom_scl_o;
+  eeprom_scl_i  <= i2c_scl_i(0);
+  i2c_sda_t(0)  <= eeprom_sda_t;
+  i2c_sda_o(0)  <= eeprom_sda_o;
+  eeprom_sda_i  <= i2c_sda_i(0);
+
+  eepEmulActive <= eepEmulActLoc;
 
 end architecture Impl;
