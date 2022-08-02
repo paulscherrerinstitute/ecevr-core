@@ -21,7 +21,13 @@ entity EcEvrWrapper is
   generic (
     CLK_FREQ_G        : real;
     BUILD_INFO_G      : std_logic_vector(31 downto 0);
-    NUM_I2C_G         : natural range 1 to 1 := 1 -- just to have a symbol
+    GEN_HBI_ILA_G     : boolean := true;
+    GEN_ESC_ILA_G     : boolean := true;
+    GEN_EOE_ILA_G     : boolean := true;
+    GEN_U2B_ILA_G     : boolean := true;
+    GEN_CNF_ILA_G     : boolean := true;
+    GEN_I2C_ILA_G     : boolean := true;
+    GEN_EEP_ILA_G     : boolean := true
   );
   port (
     sysClk            : in     std_logic;
@@ -323,7 +329,9 @@ begin
   U_EEP_CFG : entity work.EEPROMConfigurator
     generic map (
       CLOCK_FREQ_G       => CLK_FREQ_G,
-      MAX_TXPDO_MAPS_G   => MAX_TXPDO_SEGMENTS_C
+      MAX_TXPDO_MAPS_G   => MAX_TXPDO_SEGMENTS_C,
+      GEN_ILA_G          => GEN_CNF_ILA_G,
+      GEN_I2CSTRM_ILA_G  => GEN_I2C_ILA_G
     )
     port map (
       clk                => sysClk,
@@ -349,7 +357,7 @@ begin
       retries            => configRetries
     );
 
-  G_I2C_ILA : if ( true ) generate
+  G_EEP_ILA : if ( GEN_EEP_ILA_G ) generate
     signal clkdiv : unsigned(5 downto 0) := (others => '0');
     signal ilaClk : std_logic;
   begin
@@ -374,7 +382,7 @@ begin
         probe0(5)  => eeprom_sda_t,
         probe0(63 downto 6) => (others => '0')
       );
-  end generate G_I2C_ILA;
+  end generate G_EEP_ILA;
 
   configRst <= escRst or configRstR or eepRst or configInit;
 
