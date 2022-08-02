@@ -42,7 +42,8 @@ entity EcEvrBoardMap is
     lan9254_hbiOb   : in  Lan9254HBIOutType := LAN9254HBIOUT_INIT_C;
     lan9254_hbiIb   : out Lan9254HBIInpType := LAN9254HBIINP_INIT_C;
     lan9254_irq     : out std_logic;
-    lan9254_rst     : in  std_logic;
+    lan9254RstbInp  : in  std_logic := '1';
+    lan9254RstbOut  : out std_logic;
 
     ec_SYNC         : out std_logic_vector(EC_NUM_SYNC_OUT_C  - 1  downto 0);
     ec_LATCH        : in  std_logic_vector(EC_NUM_LATCH_INP_C - 1 downto 0) := (others => '0')
@@ -127,6 +128,16 @@ begin
       datOut(0)  => irq_i
     );
 
+  -- RST# synchronization
+
+  U_SYNC_RSTB : entity work.SynchronizerBit
+    port map (
+      clk        => sysClk,
+      rst        => '0',
+      datInp(0)  => fpga_i(1),
+      datOut(0)  => lan9254RstbOut
+    );
+
   -- inbound mappings
   P_LAN_2_FPGA : process ( imageSel, fpga_i, irq_i ) is
   begin
@@ -194,7 +205,7 @@ begin
       dioLatchIn,
       dioOeExt,
       lan9254_hbiOb,
-      lan9254_rst,
+      lan9254RstbInp,
       ec_LATCH
     ) is
   begin
@@ -204,8 +215,8 @@ begin
     fpga_o <= (others => '0');
 
     -- RST#
-    fpga_o(1)            <= lan9254_rst;
-    fpga_t(1)            <= '0';
+    fpga_t(1)            <= lan9254RstbInp;
+    fpga_o(1)            <= '0';
 
     -- LATCH mapping (requires EEPROM reg 0x151 to enable SYNC0/SYNC1)
     if ( imageSel = DIGIO ) then
