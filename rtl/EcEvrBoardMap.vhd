@@ -19,6 +19,8 @@ entity EcEvrBoardMap is
     fpga_o          : out std_logic_vector(43 downto 0) := (others => '0');
     fpga_t          : out std_logic_vector(43 downto 0) := (others => '1');
 
+    -- SPI image
+
     spiMst          : in  BspSpiType := BSP_SPI_INIT_C;
     -- provides readback of sck/sdo/scs from digital io
     spiSub          : out BspSpiType;
@@ -42,8 +44,8 @@ entity EcEvrBoardMap is
     lan9254_irq     : out std_logic;
     lan9254_rst     : in  std_logic;
 
-    ec_SYNC         : out std_logic_vector(1 downto 0);
-    ec_LATCH        : in  std_logic_vector(1 downto 0)
+    ec_SYNC         : out std_logic_vector(EC_NUM_SYNC_OUT_C  - 1  downto 0);
+    ec_LATCH        : in  std_logic_vector(EC_NUM_LATCH_INP_C - 1 downto 0) := (others => '0')
   );
 end entity EcEvrBoardMap;
 
@@ -229,19 +231,19 @@ begin
 
         fpga_o(22)           <= lan9254_hbiOb.cs;
         fpga_t(22)           <= '0';
-        
+
         fpga_o(21)           <= lan9254_hbiOb.be(1);
         fpga_t(21)           <= '0';
-        
+
         fpga_o(20)           <= lan9254_hbiOb.be(0);
         fpga_t(20)           <= '0';
-        
+
         fpga_o(25)           <= lan9254_hbiOb.rs;
         fpga_t(25)           <= '0';
-        
+
         fpga_o(24)           <= lan9254_hbiOb.ws;
         fpga_t(24)           <= '0';
-        
+
         fpga_o(19)           <= lan9254_hbiOb.ale(0);
         fpga_t(19)           <= '0';
 
@@ -270,5 +272,5 @@ begin
         end if;
     end case;
   end process P_FPGA_2_LAN;
-  
+
 end architecture Impl;

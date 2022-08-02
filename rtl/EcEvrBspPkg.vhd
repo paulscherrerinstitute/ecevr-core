@@ -34,4 +34,9 @@ package EcEvrBspPkg is
       );
    end component XilIOBuf;
 
+   constant NUM_I2C_C     : natural := 2;
+   constant EEP_I2C_IDX_C : natural := 0;
+   constant SFP_I2C_IDX_C : natural := 1;
+   constant PLL_I2C_IDX_C : natural := 1;
+
 end package EcEvrBspPkg;

@@ -12,6 +12,7 @@ use work.Udp2BusPkg.all;
 use work.EvrTxPDOPkg.all;
 use work.Evr320ConfigPkg.all;
 use work.EEPROMConfigPkg.all;
+use work.EcEvrBspPkg.all;
 
 library unisim;
 use unisim.vcomponents.all;
@@ -40,12 +41,12 @@ entity EcEvrWrapper is
     rxPDOMst          : out    Lan9254PDOMstType;
     rxPDORdy          : in     std_logic := '1';
 
-    i2c_scl_o         : out    std_logic_vector(NUM_I2C_G  - 1 downto 0);
-    i2c_scl_t         : out    std_logic_vector(NUM_I2C_G  - 1 downto 0);
-    i2c_scl_i         : in     std_logic_vector(NUM_I2C_G  - 1 downto 0);
-    i2c_sda_o         : out    std_logic_vector(NUM_I2C_G  - 1 downto 0);
-    i2c_sda_t         : out    std_logic_vector(NUM_I2C_G  - 1 downto 0);
-    i2c_sda_i         : in     std_logic_vector(NUM_I2C_G  - 1 downto 0);
+    i2c_scl_o         : out    std_logic_vector(NUM_I2C_C  - 1 downto 0);
+    i2c_scl_t         : out    std_logic_vector(NUM_I2C_C  - 1 downto 0);
+    i2c_scl_i         : in     std_logic_vector(NUM_I2C_C  - 1 downto 0);
+    i2c_sda_o         : out    std_logic_vector(NUM_I2C_C  - 1 downto 0);
+    i2c_sda_t         : out    std_logic_vector(NUM_I2C_C  - 1 downto 0);
+    i2c_sda_i         : in     std_logic_vector(NUM_I2C_C  - 1 downto 0);
 
     ec_latch_o        : out    std_logic_vector(EC_NUM_LATCH_INP_C - 1 downto 0);
     ec_sync_i         : in     std_logic_vector(EC_NUM_SYNC_OUT_C  - 1 downto 0) := (others => '0');
@@ -399,7 +400,7 @@ begin
     v := (others => '0');
     busSubRep(BUS_SIDX_LOC_C)       <= UDP2BUSREP_INIT_C;
     busSubRep(BUS_SIDX_LOC_C).valid <= '1';
-    configRstRin                    <= configRstR;
+    configRstRIn                    <= configRstR;
     case ( to_integer( a ) ) is
       when 0 => v(0) := configReq.net.macAddrVld;
                 v(1) := configReq.net.ip4AddrVld;
@@ -433,12 +434,12 @@ begin
     busSubRep(BUS_SIDX_LOC_C).rdata <= v;
   end process P_DIAG;
 
-  i2c_scl_t(0)  <= eeprom_scl_t;
-  i2c_scl_o(0)  <= eeprom_scl_o;
-  eeprom_scl_i  <= i2c_scl_i(0);
-  i2c_sda_t(0)  <= eeprom_sda_t;
-  i2c_sda_o(0)  <= eeprom_sda_o;
-  eeprom_sda_i  <= i2c_sda_i(0);
+  i2c_scl_t(EEP_I2C_IDX_C)  <= eeprom_scl_t;
+  i2c_scl_o(EEP_I2C_IDX_C)  <= eeprom_scl_o;
+  eeprom_scl_i              <= i2c_scl_i(EEP_I2C_IDX_C);
+  i2c_sda_t(EEP_I2C_IDX_C)  <= eeprom_sda_t;
+  i2c_sda_o(EEP_I2C_IDX_C)  <= eeprom_sda_o;
+  eeprom_sda_i              <= i2c_sda_i(EEP_I2C_IDX_C);
 
   eepEmulActive <= eepEmulActLoc;
 
