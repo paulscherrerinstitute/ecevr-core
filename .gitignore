@@ -1,0 +1,4 @@
+*.swp
+*.o
+work-obj*.cf
+e~*.lst
