@@ -15,10 +15,6 @@ use work.IlaWrappersPkg.all;
 
 entity EEPROMConfigurator is
    generic (
-      CLOCK_FREQ_G       : real;               --Hz; at least 12*i2c freq
-      I2C_FREQ_G         : real    := 100.0E3; --Hz
-      I2C_BUSY_TIMEOUT_G : real    := 0.1;     -- sec
-      I2C_CMD_TIMEOUT_G  : real    := 1.0E-3;  -- sec
       MAX_TXPDO_MAPS_G   : natural := 16;
       EEPROM_OFFSET_G    : natural := 0;       -- address of the configuration area
                                                -- if set to 0 then the SII category
@@ -34,11 +30,11 @@ entity EEPROMConfigurator is
                                                -- bits don't match (but could be banked).
                                                -- OTOH, setting this generic to a small
                                                -- value renders larger devices unusable!
-                                               -- 1- vs. 2-byte addressing can be switched
+                                               -- 1- vs. 2-byte addressing can Lo switched
                                                -- dynamically.
       I2C_ADDR_G         : std_logic_vector(6 downto 0) := "1010000";
-      GEN_ILA_G          : boolean := true;
-      GEN_I2CSTRM_ILA_G  : boolean := true
+      I2C_MUX_G          : std_logic_vector(3 downto 0) := "0000";
+      GEN_ILA_G          : boolean := true
    );
    port (
       clk                : in  std_logic;
@@ -59,14 +55,14 @@ entity EEPROMConfigurator is
       eepWriteReq        : in  EEPROMWriteWordReqType := EEPROM_WRITE_WORD_REQ_INIT_C;
       eepWriteAck        : out EEPROMWriteWordAckType;
 
-      i2cSclInp          : in  std_logic := '1';
-      i2cSclOut          : out std_logic;
-      i2cSclHiZ          : out std_logic;
+      -- i2c interface
+      i2cStrmRxMst       : in  Lan9254StrmMstType := LAN9254STRM_MST_INIT_C;
+      i2cStrmRxRdy       : out std_logic;
+      i2cStrmTxMst       : out Lan9254StrmMstType;
+      i2cStrmTxRdy       : in  std_logic := '1';
+      i2cStrmLock        : out std_logic;
 
-      i2cSdaInp          : in  std_logic := '1';
-      i2cSdaOut          : out std_logic;
-      i2cSdaHiZ          : out std_logic;
-
+      -- debugging
       retries            : out unsigned(3 downto 0);
 
       debug              : out std_logic_vector(31 downto 0)
@@ -163,12 +159,21 @@ architecture rtl of EEPROMConfigurator is
       retries   : unsigned( 3 downto 0);
       catsFound : natural range 0 to MAX_CATS_C;
       eepWrAck  : EEPROMWriteWordAckType;
+      i2cLock   : std_logic;
    end record RegType;
+
+   function TX_MST_INIT_F return Lan9254StrmMstType is
+      variable v : Lan9254StrmMstType;
+   begin
+      v     := LAN9254STRM_MST_INIT_C;
+      v.usr := I2C_MUX_G;
+      return v;
+   end function TX_MST_INIT_F;
 
    constant REG_INIT_C : RegType := (
       state     => INIT,
       retState  => INIT,
-      strmTxMst => LAN9254STRM_MST_INIT_C,
+      strmTxMst => TX_MST_INIT_F,
       smCfg     => ESC_CONFIG_REQ_NULL_C,
       smCfg32   => "00",
       eepAddr   => to_unsigned( CAT_OFF_C      , 16),
@@ -199,7 +204,8 @@ architecture rtl of EEPROMConfigurator is
       cfgFound  => false,
       retries   => (others => '0'),
       catsFound => 0,
-      eepWrAck  => EEPROM_WRITE_WORD_ACK_INIT_C
+      eepWrAck  => EEPROM_WRITE_WORD_ACK_INIT_C,
+      i2cLock   => '0'
    );
 
    procedure storeByte(
@@ -261,10 +267,14 @@ architecture rtl of EEPROMConfigurator is
 
    signal configReqLoc      : EEPROMConfigReqType := EEPROM_CONFIG_REQ_INIT_C;
 
-   signal strmRxMst         : Lan9254StrmMstType;
    signal strmTxRdy         : std_logic;
+   signal strmRxMst         : Lan9254StrmMstType;
 
 begin
+
+   -- abbreviation
+   strmTxRdy <= i2cStrmTxRdy;
+   strmRxMst <= i2cStrmRxMst;
 
    assert EEPROM_OFFSET_G + PROM_LEN_C <= EEPROM_SIZE_G / 8
       report "EEPROM too small" severity failure;
@@ -347,6 +357,7 @@ begin
                  v.strmTxMst.ben   := "11";
                  v.strmTxMst.valid := '1';
                  v.state           := ADDR;
+                 v.i2cLock         := '1';
                else
                  v.state           := REMU;
                end if;
@@ -423,6 +434,7 @@ begin
             end if;
 
          when CHECK =>
+            v.i2cLock  := '0';
             v.allZeros := r.allZeros and toSl( r.cfgImg( to_integer( r.cnt ) ) = x"00" );
             v.allOnes  := r.allOnes  and toSl( r.cfgImg( to_integer( r.cnt ) ) = x"FF" );
             if    ( r.cnt = 5 + NET_CFG_OFF_C ) then
@@ -462,6 +474,7 @@ begin
                v.strmTxMst.last  := '0';
                v.strmTxMst.ben   := "11";
                v.strmTxMst.valid := '1';
+               v.i2cLock         := '1';
                v.state           := I2C_WRA;
             end if;
 
@@ -486,6 +499,7 @@ begin
                   -- Assume the last TX transaction is accepted
                   -- before we receive this reply.
                   v.strmRxRdy    := '0';
+                  v.i2cLock      := '0';
                   v.state        := DONE;
                end if;
             elsif ( strmTxRdy = '1' ) then
@@ -608,6 +622,7 @@ begin
             v.strmRxRdy := '1';
             if ( (r.strmRxRdy and strmRxMst.last and strmRxMst.valid) = '1' ) then
                v.strmRxRdy := '0';
+               v.i2cLock   := '0';
                v.state     := START;
             end if;
 
@@ -627,33 +642,6 @@ begin
       end if;
    end process P_SEQ;
 
-   U_STRM : entity work.PsiI2cStreamIF
-      generic map (
-         CLOCK_FREQ_G   => CLOCK_FREQ_G,
-         I2C_FREQ_G     => I2C_FREQ_G,
-         BUSY_TIMEOUT_G => I2C_BUSY_TIMEOUT_G,
-         CMD_TIMEOUT_G  => I2C_CMD_TIMEOUT_G,
-         GEN_ILA_G      => GEN_I2CSTRM_ILA_G
-      )
-      port map (
-         clk            => clk,
-         rst            => rst,
-
-         strmMstIb      => r.strmTxMst,
-         strmRdyIb      => strmTxRdy,
-
-         strmMstOb      => strmRxMst,
-         strmRdyOb      => r.strmRxRdy,
-
-         i2c_scl_i      => i2cSclInp,
-         i2c_scl_o      => i2cSclOut,
-         i2c_scl_t      => i2cSclHiZ,
-
-         i2c_sda_i      => i2cSdaInp,
-         i2c_sda_o      => i2cSdaOut,
-         i2c_sda_t      => i2cSdaHiZ
-      );
-
    dbufMaps    <= r.maps;
    configReq   <= configReqLoc;
 
@@ -663,6 +651,10 @@ begin
 
    debug(31 downto 4) <= (others => '0');
    debug( 3 downto 0) <= std_logic_vector( to_unsigned( StateType'pos( r.state ), 4 ) );
+
+   i2cStrmRxRdy  <= r.strmRxRdy;
+   i2cStrmTxMst  <= r.strmTxMst;
+   i2cStrmLock   <= r.i2cLock;
 
    G_ILA : if ( GEN_ILA_G ) generate
       signal p0 : std_logic_vector(63 downto 0) := (others => '0');

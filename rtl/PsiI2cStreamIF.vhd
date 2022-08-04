@@ -25,7 +25,7 @@ entity PsiI2cStreamIF is
       -- first beat on this interface transfers transfers the
       -- i2c address (including the read/writeB flag).
       -- The upper byte-lane (6:0) contains the read count - 1.
-      -- the lsbit data(15), if set refrains from sending a STOP condition.
+      -- the msbit (data[15]), if set refrains from sending a STOP condition.
       --
       strmMstIb       : in  Lan9254StrmMstType := LAN9254STRM_MST_INIT_C;
       strmRdyIb       : out std_logic          := '1';
@@ -47,7 +47,9 @@ entity PsiI2cStreamIF is
 
       -- asserted if we are unable to acquire the bus for
       -- a long time
-      arbError        : out std_logic
+      arbError        : out std_logic;
+
+      debug           : in  std_logic_vector(63 downto 0) := (others => '0')
    );
 end entity PsiI2cStreamIF;
 
@@ -469,6 +471,8 @@ begin
 
       p1(15 downto  0) <= strmMstIb.data;
       p1(63 downto 16) <= (others => '0');
+
+      p3               <= debug;
 
       U_ILA : component Ila_256
          port map (

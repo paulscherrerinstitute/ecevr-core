@@ -3,7 +3,7 @@ library ieee;
 use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
-use work.Ila_256Pkg.all;
+use work.IlaWrappersPkg.all;
 
 use work.Lan9254Pkg.all;
 use work.Lan9254ESCPkg.all;
@@ -27,7 +27,8 @@ entity EcEvrWrapper is
     GEN_U2B_ILA_G     : boolean := true;
     GEN_CNF_ILA_G     : boolean := true;
     GEN_I2C_ILA_G     : boolean := true;
-    GEN_EEP_ILA_G     : boolean := true
+    GEN_EEP_ILA_G     : boolean := true;
+    NUM_BUS_SUBS_G    : natural := 0
   );
   port (
     sysClk            : in     std_logic;
@@ -46,6 +47,9 @@ entity EcEvrWrapper is
 
     rxPDOMst          : out    Lan9254PDOMstType;
     rxPDORdy          : in     std_logic := '1';
+
+    busReqs           : out    Udp2BusReqArray(NUM_BUS_SUBS_G - 1 downto 0);
+    busReps           : in     Udp2BusRepArray(NUM_BUS_SUBS_G - 1 downto 0) := (others => UDP2BUSREP_ERROR_C);
 
     i2c_scl_o         : out    std_logic_vector(NUM_I2C_C  - 1 downto 0);
     i2c_scl_t         : out    std_logic_vector(NUM_I2C_C  - 1 downto 0);
@@ -83,9 +87,11 @@ architecture Impl of EcEvrWrapper is
 
   constant EVR_BASE_ADDR_C          : unsigned(31 downto 0) := x"0000_0000";
 
-  constant NUM_BUS_SUBS_C           : natural := 2;
+  constant NUM_LOC_SUBS_C           : natural := 3;
+  constant NUM_BUS_SUBS_C           : natural := NUM_LOC_SUBS_C + NUM_BUS_SUBS_G;
   constant BUS_SIDX_EVR_C           : natural := 0;
   constant BUS_SIDX_LOC_C           : natural := 1;
+  constant BUS_SIDX_I2C_C           : natural := 2;
 
   constant NUM_HBI_MSTS_C           : natural := 1;
   constant PRI_HBI_MSTS_C           : integer := -1;
@@ -95,14 +101,9 @@ architecture Impl of EcEvrWrapper is
 
   constant MAX_TXPDO_SEGMENTS_C     : natural := 16;
 
-
-  signal eeprom_sda_i   : std_logic;
-  signal eeprom_sda_o   : std_logic := '1';
-  signal eeprom_sda_t   : std_logic := '1';
-
-  signal eeprom_scl_i   : std_logic;
-  signal eeprom_scl_o   : std_logic := '1';
-  signal eeprom_scl_t   : std_logic := '1';
+  constant NUM_I2C_MST_C            : natural :=  2;
+  constant I2C_MST_CFG_C            : natural :=  0;
+  constant I2C_MST_BUS_C            : natural :=  1;
 
   signal configReq      : EEPROMConfigReqType;
   signal configAck      : EEPROMConfigAckType := EEPROM_CONFIG_ACK_ASSERT_C;
@@ -147,7 +148,17 @@ architecture Impl of EcEvrWrapper is
 
   signal eepEmulActLoc  : std_logic;
 
+  signal i2cStrmLock    : std_logic_vector(NUM_I2C_MST_C - 1 downto 0);
+
+  signal i2cStrmReqMst, i2cStrmRepMst : Lan9254StrmMstArray(NUM_I2C_MST_C - 1 downto 0);
+  signal i2cStrmReqRdy, i2cStrmRepRdy : std_logic_vector   (NUM_I2C_MST_C - 1 downto 0);
+
+  signal sda_o_loc, scl_o_loc, sda_t_loc, scl_t_loc : std_logic_vector(NUM_I2C_C - 1 downto 0);
+
 begin
+
+  busSubRep(NUM_BUS_SUBS_C - 1 downto NUM_LOC_SUBS_C) <= busReps;
+  busReqs                                             <= busSubReq(NUM_BUS_SUBS_C - 1 downto NUM_LOC_SUBS_C);
 
   P_HBI_MUX : process (
     extHbiSel, extHbiReq, escHbiReq, hbiRep
@@ -166,7 +177,8 @@ begin
 
   U_HBI : entity work.Lan9254HBI
     generic map (
-      CLOCK_FREQ_G => CLK_FREQ_G
+      CLOCK_FREQ_G => CLK_FREQ_G,
+      GEN_ILA_G    => GEN_HBI_ILA_G
     )
     port map (
       clk          => sysClk,
@@ -187,7 +199,10 @@ begin
       NUM_EXT_HBI_MASTERS_G => NUM_HBI_MSTS_C,
       EXT_HBI_MASTERS_PRI_G => PRI_HBI_MSTS_C,
       -- our EvrTxPDO talks to the HBI directly
-      DISABLE_TXPDO_G       => true
+      DISABLE_TXPDO_G       => true,
+      GEN_ESC_ILA_G         => GEN_ESC_ILA_G,
+      GEN_EOE_ILA_G         => GEN_EOE_ILA_G,
+      GEN_U2B_ILA_G         => GEN_U2B_ILA_G
     )
     port map (
       clk             => sysClk,
@@ -328,10 +343,8 @@ begin
 
   U_EEP_CFG : entity work.EEPROMConfigurator
     generic map (
-      CLOCK_FREQ_G       => CLK_FREQ_G,
       MAX_TXPDO_MAPS_G   => MAX_TXPDO_SEGMENTS_C,
-      GEN_ILA_G          => GEN_CNF_ILA_G,
-      GEN_I2CSTRM_ILA_G  => GEN_I2C_ILA_G
+      GEN_ILA_G          => GEN_CNF_ILA_G
     )
     port map (
       clk                => sysClk,
@@ -346,16 +359,57 @@ begin
 
       i2cAddr2BMode      => '0',
 
-      i2cSclInp          => eeprom_scl_i,
-      i2cSclOut          => eeprom_scl_o,
-      i2cSclHiZ          => eeprom_scl_t,
-
-      i2cSdaInp          => eeprom_sda_i,
-      i2cSdaOut          => eeprom_sda_o,
-      i2cSdaHiZ          => eeprom_sda_t,
+      i2cStrmRxMst       => i2cStrmRepMst(I2C_MST_CFG_C),
+      i2cStrmRxRdy       => i2cStrmRepRdy(I2C_MST_CFG_C),
+      i2cStrmTxMst       => i2cStrmReqMst(I2C_MST_CFG_C),
+      i2cStrmTxRdy       => i2cStrmReqRdy(I2C_MST_CFG_C),
+      i2cStrmLock        => i2cStrmLock  (I2C_MST_CFG_C),
 
       retries            => configRetries
     );
+
+  U_BUS_I2C : entity work.Bus2I2cStreamIF
+    port map (
+      clk                => sysClk,
+      rst                => sysRst,
+
+      busReq             => busSubReq(BUS_SIDX_I2C_C),
+      busRep             => busSubRep(BUS_SIDX_I2C_C),
+
+      strmMstOb          => i2cStrmReqMst(I2C_MST_BUS_C),
+      strmRdyOb          => i2cStrmReqRdy(I2C_MST_BUS_C),
+      strmMstIb          => i2cStrmRepMst(I2C_MST_BUS_C),
+      strmRdyIb          => i2cStrmRepRdy(I2C_MST_BUS_C),
+      strmLock           => i2cStrmLock  (I2C_MST_BUS_C)
+    );
+
+  U_I2C_MST : entity work.I2cWrapper
+    generic map (
+      CLOCK_FREQ_G       => CLK_FREQ_G,
+      NUM_I2C_MST_G      => NUM_I2C_MST_C,
+      NUM_I2C_BUS_G      => NUM_I2C_C,
+      GEN_I2CSTRM_ILA_G  => GEN_I2C_ILA_G
+    )
+    port map (
+      clk                => sysClk,
+      rst                => sysRst,
+
+      i2cStrmMstIb       => i2cStrmReqMst,
+      i2cStrmRdyIb       => i2cStrmReqRdy,
+      i2cStrmMstOb       => i2cStrmRepMst,
+      i2cStrmRdyOb       => i2cStrmRepRdy,
+
+      i2cStrmLock        => i2cStrmLock,
+
+      i2cSclInp          => i2c_scl_i,
+      i2cSclOut          => scl_o_loc,
+      i2cSclHiZ          => scl_t_loc,
+
+      i2cSdaInp          => i2c_sda_i,
+      i2cSdaOut          => sda_o_loc,
+      i2cSdaHiZ          => sda_t_loc
+    );
+     
 
   G_EEP_ILA : if ( GEN_EEP_ILA_G ) generate
     signal clkdiv : unsigned(5 downto 0) := (others => '0');
@@ -373,14 +427,26 @@ begin
 
     U_ILA : Ila_256
       port map (
-        clk        => ilaClk,
-        probe0(0)  => eeprom_scl_i,
-        probe0(1)  => eeprom_sda_i,
-        probe0(2)  => eeprom_scl_o,
-        probe0(3)  => eeprom_sda_o,
-        probe0(4)  => eeprom_scl_t,
-        probe0(5)  => eeprom_sda_t,
-        probe0(63 downto 6) => (others => '0')
+        clk         => ilaClk,
+        probe0( 0)  => i2c_scl_i(EEP_I2C_IDX_C),
+        probe0( 1)  => i2c_sda_i(EEP_I2C_IDX_C),
+        probe0( 2)  => scl_o_loc(EEP_I2C_IDX_C),
+        probe0( 3)  => sda_o_loc(EEP_I2C_IDX_C),
+        probe0( 4)  => scl_t_loc(EEP_I2C_IDX_C),
+        probe0( 5)  => sda_t_loc(EEP_I2C_IDX_C),
+        probe0( 6)  => '0',
+        probe0( 7)  => '0',
+        probe0( 8)  => i2c_scl_i(PLL_I2C_IDX_C),
+        probe0( 9)  => i2c_sda_i(PLL_I2C_IDX_C),
+        probe0(10)  => scl_o_loc(PLL_I2C_IDX_C),
+        probe0(11)  => sda_o_loc(PLL_I2C_IDX_C),
+        probe0(12)  => scl_t_loc(PLL_I2C_IDX_C),
+        probe0(13)  => sda_t_loc(PLL_I2C_IDX_C),
+        probe0(63 downto 14) => (others => '0'),
+
+        probe1      => (others => '0'),
+        probe2      => (others => '0'),
+        probe3      => (others => '0')
       );
   end generate G_EEP_ILA;
 
@@ -442,12 +508,10 @@ begin
     busSubRep(BUS_SIDX_LOC_C).rdata <= v;
   end process P_DIAG;
 
-  i2c_scl_t(EEP_I2C_IDX_C)  <= eeprom_scl_t;
-  i2c_scl_o(EEP_I2C_IDX_C)  <= eeprom_scl_o;
-  eeprom_scl_i              <= i2c_scl_i(EEP_I2C_IDX_C);
-  i2c_sda_t(EEP_I2C_IDX_C)  <= eeprom_sda_t;
-  i2c_sda_o(EEP_I2C_IDX_C)  <= eeprom_sda_o;
-  eeprom_sda_i              <= i2c_sda_i(EEP_I2C_IDX_C);
+  i2c_scl_o     <= scl_o_loc;
+  i2c_scl_t     <= scl_t_loc;
+  i2c_sda_o     <= sda_o_loc;
+  i2c_sda_t     <= sda_t_loc;
 
   eepEmulActive <= eepEmulActLoc;
 
