@@ -5,6 +5,8 @@ source -quiet $::env(RUCKUS_DIR)/vivado_proc.tcl
 foreach f {
   AxilLan9254HbiMaster.vhd
   AxilSpiMaster.vhd
+  Bus2DRP.vhd
+  Bus2I2cStreamIF.vhd
   EcEvrBoardMap.vhd
   EcEvrBspPkg.vhd
   EcEvrWrapper.vhd
@@ -16,6 +18,7 @@ foreach f {
   EvrTxPDOPkg.vhd
   EvrTxPDO.vhd
   I2cEEPROM.vhd
+  I2cWrapper.vhd
   PhaseDetector.vhd
   PsiI2cStreamIF.vhd
   ZynqBspPkg.vhd
@@ -23,5 +26,5 @@ foreach f {
   ZynqOBufDS.vhd
   ZynqSpiIOBuf.vhd
 } {
-  loadSource    -path "$::DIR_PATH/rtl/$f"
+  loadSource    -path "$::DIR_PATH/hdl/$f"
 }
