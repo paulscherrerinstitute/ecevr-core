@@ -20,7 +20,11 @@ entity I2CEEPROM is
 
        sclSync      : in  std_logic;
        sdaSync      : in  std_logic;
-       sdaOut       : out std_logic
+       sdaOut       : out std_logic;
+
+       -- direct access for use in test benches
+       addrInp      : in  natural := 0;
+       dataOut      : out std_logic_vector(7 downto 0)
    );
 end entity I2CEEPROM;
 
@@ -87,7 +91,7 @@ architecture rtl of I2CEEPROM is
    signal rin         : RegType;
 
    function EEPROM_INIT_F return Slv8Array is
-      variable v : Slv8Array(SIZE_BYTES_G - 1 downto 0) := (others => (others => '0'));
+      variable v : Slv8Array(SIZE_BYTES_G - 1 downto 0) := (others => (others => '1'));
       constant c : std_logic_vector(EEPROM_INIT_G'high downto EEPROM_INIT_G'low) := EEPROM_INIT_G;
    begin
       for i in 0 to c'length/8 - 1 loop
@@ -244,6 +248,8 @@ begin
          end if;
       end if;
    end process P_SEQ;
+
+   dataOut <= eeprom( addrInp ) when addrInp < eeprom'length else "XXXXXXXX";
 
    sdaOut <= r.sdaOut;
 
