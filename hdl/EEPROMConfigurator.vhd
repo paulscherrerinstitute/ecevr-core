@@ -24,6 +24,9 @@ entity EEPROMConfigurator is
                                                -- (or vendor-) specific ID according to
                                                -- the SII spec. Ignored if EEPROM_OFFSET_G
                                                -- is nonzero.
+      CATEGORY_I2CPRG_G  : std_logic_vector(15 downto 0) := x"0002";
+                                               -- category that holds a programming stream
+                                               -- to initialize i2c devices (such as clocks)
       EEPROM_SIZE_G      : natural := 16384;   -- in bits; it's probably a good idea
                                                -- to always use the maximum. Smaller
                                                -- devices will not respond if the higher
@@ -54,6 +57,10 @@ entity EEPROMConfigurator is
 
       eepWriteReq        : in  EEPROMWriteWordReqType := EEPROM_WRITE_WORD_REQ_INIT_C;
       eepWriteAck        : out EEPROMWriteWordAckType;
+
+      -- initialization of i2c devices; a program to write registers may be in the EEPROM
+      i2cProgFound       : out std_logic;
+      i2cProgAddr        : out unsigned(15 downto 0);
 
       -- i2c interface
       i2cStrmRxMst       : in  Lan9254StrmMstType := LAN9254STRM_MST_INIT_C;
@@ -156,6 +163,8 @@ architecture rtl of EEPROMConfigurator is
       lnMaps    : natural range 0 to MAX_TXPDO_MAPS_G;
       catDone   : boolean;
       cfgFound  : boolean;
+      i2cPrgFnd : std_logic_vector(1 downto 0);
+      i2cPrgAdr : unsigned(15 downto 0);
       retries   : unsigned( 3 downto 0);
       catsFound : natural range 0 to MAX_CATS_C;
       eepWrAck  : EEPROMWriteWordAckType;
@@ -202,6 +211,8 @@ architecture rtl of EEPROMConfigurator is
       lnMaps    => 0,
       catDone   => (EEPROM_OFFSET_G /= 0),
       cfgFound  => false,
+      i2cPrgFnd => "00",
+      i2cPrgAdr => ( others => '0'),
       retries   => (others => '0'),
       catsFound => 0,
       eepWrAck  => EEPROM_WRITE_WORD_ACK_INIT_C,
@@ -409,6 +420,10 @@ begin
                   if ( v.cfgEnd > PROM_LEN_C - 1 ) then
                      v.cfgEnd := PROM_LEN_C - 1;
                   end if;
+               elsif ( ( r.cfgImg(1) & r.cfgImg(0) ) = CATEGORY_I2CPRG_G ) then
+                  -- that's us! i2c program found
+                  v.i2cPrgFnd(0) := '1';
+                  v.i2cPrgAdr    := r.eepAddr;
                elsif ( ( r.cfgImg(1) & r.cfgImg(0) ) = CAT_SM_C ) then
                   -- sync manager
                   if    ( toU16(r.cfgImg, 2) >= 32/2 ) then
@@ -455,6 +470,7 @@ begin
                if ( r.cfgFound ) then
                   v.evrCfgVld     := versionMatch( r );
                end if;
+               v.i2cPrgFnd(1)  := (r.i2cPrgFnd(0) and versionMatch( r ));
                v.txPdoVld      := '1';
             end if;
             v.cnt := r.cnt + 1;
@@ -655,6 +671,9 @@ begin
    i2cStrmRxRdy  <= r.strmRxRdy;
    i2cStrmTxMst  <= r.strmTxMst;
    i2cStrmLock   <= r.i2cLock;
+
+   i2cProgFound  <= r.i2cPrgFnd(1);
+   i2cProgAddr   <= r.i2cPrgAdr;
 
    G_ILA : if ( GEN_ILA_G ) generate
       signal p0 : std_logic_vector(63 downto 0) := (others => '0');

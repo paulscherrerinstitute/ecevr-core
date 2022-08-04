@@ -576,6 +576,7 @@ architecture sim of EEPROMConfiguratorTb is
       125 => x"00",
       126 => x"01",
       127 => x"00",
+
       128 => x"01",
       129 => x"00",
       130 => x"1e",
@@ -640,6 +641,7 @@ architecture sim of EEPROMConfiguratorTb is
       189 => x"00",
       190 => x"00",
       191 => x"00",
+
       192 => x"0a",
       193 => x"00",
       194 => x"32",
@@ -744,6 +746,7 @@ architecture sim of EEPROMConfiguratorTb is
       293 => x"62",
       294 => x"61",
       295 => x"72",
+
       296 => x"1e",
       297 => x"00",
       298 => x"10",
@@ -780,6 +783,7 @@ architecture sim of EEPROMConfiguratorTb is
       329 => x"00",
       330 => x"00",
       331 => x"00",
+
       332 => x"28",
       333 => x"00",
       334 => x"02",
@@ -788,6 +792,7 @@ architecture sim of EEPROMConfiguratorTb is
       337 => x"02",
       338 => x"03",
       339 => x"00",
+
       340 => x"29",
       341 => x"00",
       342 => x"10",
@@ -824,6 +829,7 @@ architecture sim of EEPROMConfiguratorTb is
       373 => x"00",
       374 => x"01",
       375 => x"04",
+
       376 => x"32",
       377 => x"00",
       378 => x"14",
@@ -868,6 +874,7 @@ architecture sim of EEPROMConfiguratorTb is
       417 => x"20",
       418 => x"00",
       419 => x"00",
+
       420 => x"33",
       421 => x"00",
       422 => x"10",
@@ -904,14 +911,24 @@ architecture sim of EEPROMConfiguratorTb is
       453 => x"08",
       454 => x"00",
       455 => x"00",
-      456 => x"ff",
-      457 => x"ff",
+
+      456 => x"02",
+      457 => x"00",
+      458 => x"03",
+      459 => x"00",
+      460 => x"A0",
+      461 => x"01",
+      462 => x"dd",
+      463 => x"ff",
+      464 => x"ff",
+
+      465 => x"ff",
+      466 => x"ff",
       others => x"ff"
    );
 
    function fillEEPROM return Slv08Array is
       variable v : Slv08Array(SIZE_BYTES_C - 1 downto 0);
-      variable i : integer;
    begin
       for i in 0 to SIZE_BYTES_C/2 - 1 loop
          if ( i <  EEPROM_INIT_C'length ) then
@@ -927,7 +944,7 @@ architecture sim of EEPROMConfiguratorTb is
 
    constant EEPROM_CONFIGURED_C : Slv08Array(SIZE_BYTES_C - 1 downto 0) := fillEEPROM;
 
-   constant EEPROM_8_INIT_C : Slv08Array := EEPROM_CONFIGURED_C;
+   constant EEPROM_8_INIT_C : Slv08Array := EEPROM_INIT_2_C; --EEPROM_CONFIGURED_C;
 
    signal wrReq : EEPROMWriteWordReqType := (
       waddr => to_unsigned(16, 15),
@@ -936,6 +953,12 @@ architecture sim of EEPROMConfiguratorTb is
    );
 
    signal wrAck : EEPROMWriteWordAckType;
+
+   signal strmTxMst, strmRxMst : Lan9254StrmMstType;
+   signal strmTxRdy, strmRxRdy : std_logic;
+
+   signal progFound            : std_logic;
+   signal progAddr             : unsigned(15 downto 0);
 
 begin
 
@@ -1002,6 +1025,11 @@ begin
          if ( wrAck.ack = '1' ) then
             run <= false;
             wrReq.valid <= '0';
+            if ( progFound = '1' ) then
+               report "I2C CONFIGURATION PROGRAM FOUND @" & integer'image(to_integer(progAddr));
+            else
+               report "NO I2C CONFIGURATION PROGRAM FOUND";
+            end if;
          end if;
       end if;
    end process P_DON;
@@ -1026,8 +1054,6 @@ begin
    -- (probably due to synchronizer delays)
    U_DUT : entity work.EEPROMConfigurator
       generic map (
-         CLOCK_FREQ_G               => 5.0e5,
-         I2C_FREQ_G                 => 1.0e4,
          EEPROM_OFFSET_G            => 0, --128,
          EEPROM_SIZE_G              => (8*SIZE_BYTES_C),
          MAX_TXPDO_MAPS_G           => MAX_TXPDO_MAPS_C,
@@ -1047,13 +1073,42 @@ begin
 
          emulActive      => EMUL_ACTIVE_G,
 
-         i2cSclInp       => scl,
-         i2cSclOut       => scl_m_o,
-         i2cSclHiZ       => scl_m_t,
-
-         i2cSdaInp       => sda,
-         i2cSdaOut       => sda_m_o,
-         i2cSdaHiZ       => sda_m_t
+         i2cProgFound    => progFound,
+         i2cProgAddr     => progAddr,
+        
+         i2cStrmTxMst   => strmTxMst,
+         i2cStrmTxRdy   => strmTxRdy,
+   
+         i2cStrmRxMst   => strmRxMst,
+         i2cStrmRxRdy   => strmRxRdy
+ 
       );
+
+      U_STRM : entity work.PsiI2cStreamIF
+         generic map (
+            CLOCK_FREQ_G   => 5.0e5,
+            I2C_FREQ_G     => 1.0e4
+         )
+         port map (
+            clk            => clk,
+            rst            => rst,
+   
+            strmMstIb      => strmTxMst,
+            strmRdyIb      => strmTxRdy,
+   
+            strmMstOb      => strmRxMst,
+            strmRdyOb      => strmRxRdy,
+   
+            i2c_scl_i      => scl,
+            i2c_scl_o      => scl_m_o,
+            i2c_scl_t      => scl_m_t,
+   
+            i2c_sda_i      => sda,
+            i2c_sda_o      => sda_m_o,
+            i2c_sda_t      => sda_m_t,
+   
+            debug          => open
+         );
+
 end architecture sim;
 
