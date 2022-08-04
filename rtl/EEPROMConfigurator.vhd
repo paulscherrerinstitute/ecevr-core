@@ -385,9 +385,10 @@ begin
                   else
                      -- fall back
                      v.state    := CHECK;
-                     v.allZeros := '0';
-                     v.allOnes  := '0';
-                     v.cnt      := to_unsigned( 0, v.cnt'length );
+                     v.allZeros := '1';
+                     v.allOnes  := '1';
+                     -- we have no configuration found; skip verifying it
+                     v.cnt      := to_unsigned( CFG_LEN_C - 1, v.cnt'length );
                   end if;
                elsif ( ( r.cfgImg(1) & r.cfgImg(0) ) = CATEGORY_ID_G ) then
                   -- that's us! set the reader up for the 'real' data
@@ -418,28 +419,30 @@ begin
                v.state    := CHECK;
                v.allZeros := '1';
                v.allOnes  := '1';
-               v.cnt      := to_unsigned( 0, v.cnt'length );
+               v.cnt      := to_unsigned( NET_CFG_OFF_C, v.cnt'length );
             end if;
 
          when CHECK =>
             v.allZeros := r.allZeros and toSl( r.cfgImg( to_integer( r.cnt ) ) = x"00" );
             v.allOnes  := r.allOnes  and toSl( r.cfgImg( to_integer( r.cnt ) ) = x"FF" );
-            if    ( r.cnt = 5 ) then
+            if    ( r.cnt = 5 + NET_CFG_OFF_C ) then
                v.macVld   := not v.allOnes and not v.allZeros and versionMatch( r );
                v.allOnes  := '1';
                v.allZeros := '1';
-            elsif ( r.cnt = 9 ) then
+            elsif ( r.cnt = 9 + NET_CFG_OFF_C ) then
                v.ip4Vld   := not v.allOnes and not v.allZeros and versionMatch( r );
                v.allOnes  := '1';
                v.allZeros := '1';
-            elsif ( r.cnt = 11 ) then
+            elsif ( r.cnt = 11 + NET_CFG_OFF_C ) then
                v.udpVld   := not v.allOnes and not v.allZeros and versionMatch( r );
                v.allOnes  := '1';
             elsif ( r.cnt = CFG_LEN_C - 1 ) then
                v.state         := DONE;
                -- let the ESC start
                v.smCfg.valid   := '1';
-               v.evrCfgVld     := versionMatch( r );
+               if ( r.cfgFound ) then
+                  v.evrCfgVld     := versionMatch( r );
+               end if;
                v.txPdoVld      := '1';
             end if;
             v.cnt := r.cnt + 1;
