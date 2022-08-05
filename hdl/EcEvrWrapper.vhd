@@ -21,6 +21,10 @@ entity EcEvrWrapper is
   generic (
     CLK_FREQ_G        : real;
     BUILD_INFO_G      : std_logic_vector(31 downto 0);
+    -- i2c address or EEPROM
+    EEP_I2C_ADDR_G    : std_logic_vector(7 downto 0) := x"50";
+    EEP_I2C_MUX_SEL_G : std_logic_vector(3 downto 0) := "0000";
+    -- i2c mux selector for EEPROM
     GEN_HBI_ILA_G     : boolean := true;
     GEN_ESC_ILA_G     : boolean := true;
     GEN_EOE_ILA_G     : boolean := true;
@@ -50,6 +54,9 @@ entity EcEvrWrapper is
 
     busReqs           : out    Udp2BusReqArray(NUM_BUS_SUBS_G - 1 downto 0);
     busReps           : in     Udp2BusRepArray(NUM_BUS_SUBS_G - 1 downto 0) := (others => UDP2BUSREP_ERROR_C);
+
+    -- whether the EEPROM uses 2-byte or 1-byte addressing
+    i2cAddr2BMode     : in     std_logic;
 
     i2c_scl_o         : out    std_logic_vector(NUM_I2C_C  - 1 downto 0);
     i2c_scl_t         : out    std_logic_vector(NUM_I2C_C  - 1 downto 0);
@@ -101,9 +108,10 @@ architecture Impl of EcEvrWrapper is
 
   constant MAX_TXPDO_SEGMENTS_C     : natural := 16;
 
-  constant NUM_I2C_MST_C            : natural :=  2;
+  constant NUM_I2C_MST_C            : natural :=  3;
   constant I2C_MST_CFG_C            : natural :=  0;
   constant I2C_MST_BUS_C            : natural :=  1;
+  constant I2C_MST_PRG_C            : natural :=  2;
 
   signal configReq      : EEPROMConfigReqType;
   signal configAck      : EEPROMConfigAckType := EEPROM_CONFIG_ACK_ASSERT_C;
@@ -148,12 +156,31 @@ architecture Impl of EcEvrWrapper is
 
   signal eepEmulActLoc  : std_logic;
 
+  -- the lock bits arbitrate access to the I2C master among multiple
+  -- upstream entities.
+  -- the first controller to send to the stream mux acquires the lock
+  -- and must clear it's bit when done:
+  --  1.  set lock bit
+  --  2.  try sending commands/data on the stream. This will only
+  --      proceed one nobody else holds the lock.
+  --  3.  go on using the stream/i2c master + bus; nobody else
+  --      can do so.
+  --  4.  clear lock bit.
   signal i2cStrmLock    : std_logic_vector(NUM_I2C_MST_C - 1 downto 0);
 
   signal i2cStrmReqMst, i2cStrmRepMst : Lan9254StrmMstArray(NUM_I2C_MST_C - 1 downto 0);
   signal i2cStrmReqRdy, i2cStrmRepRdy : std_logic_vector   (NUM_I2C_MST_C - 1 downto 0);
 
   signal sda_o_loc, scl_o_loc, sda_t_loc, scl_t_loc : std_logic_vector(NUM_I2C_C - 1 downto 0);
+
+  signal i2cProgRun   : std_logic := '1';
+  signal i2cProgValid : std_logic;
+  signal i2cProgRdy   : std_logic;
+  signal i2cProgFound : std_logic;
+  signal i2cProgAddr  : unsigned(15 downto 0);
+  signal i2cProgDone  : std_logic;
+  signal i2cProgAck   : std_logic := '1';
+  signal i2cProgErr   : std_logic;
 
 begin
 
@@ -357,7 +384,10 @@ begin
       dbufMaps           => dbufSegments,
       emulActive         => eepEmulActLoc,
 
-      i2cAddr2BMode      => '0',
+      i2cAddr2BMode      => i2cAddr2BMode,
+
+      i2cProgFound       => i2cProgFound,
+      i2cProgAddr        => i2cProgAddr,
 
       i2cStrmRxMst       => i2cStrmRepMst(I2C_MST_CFG_C),
       i2cStrmRxRdy       => i2cStrmRepRdy(I2C_MST_CFG_C),
@@ -367,6 +397,47 @@ begin
 
       retries            => configRetries
     );
+
+  U_I2C_PROG : entity work.I2cProgrammer
+    generic map (
+      I2C_ADDR_G         => EEP_I2C_ADDR_G,
+      I2C_MUX_G          => EEP_I2C_MUX_SEL_G
+    )
+    port map (
+      clk                => sysClk,
+      rst                => sysRst,
+
+      -- asserting starts the program
+      cfgVld             => i2cProgValid,
+      cfgRdy             => i2cProgRdy,
+      cfgAddr            => i2cProgAddr,
+      cfgEepSz2B         => i2cAddr2BMode,
+      -- read from emulated eeprom
+      cfgEmul            => eepEmulActive,
+
+      don                => i2cProgDone,
+      err                => i2cProgErr,
+      ack                => i2cProgAck,
+      
+      i2cReq             => i2cStrmReqMst(I2C_MST_PRG_C),
+      i2cReqRdy          => i2cStrmReqRdy(I2C_MST_PRG_C),
+      i2cRep             => i2cStrmRepMst(I2C_MST_PRG_C),
+      i2cRepRdy          => i2cStrmRepRdy(I2C_MST_PRG_C),
+      i2cLock            => i2cStrmLock  (I2C_MST_PRG_C)
+    );
+
+  i2cProgValid <= (i2cProgFound and i2cProgRun);
+
+  P_PRG_START : process ( sysClk ) is
+  begin
+    if ( rising_edge( clk ) ) then
+      if ( sysRst = '1' ) then
+        i2cProgRun <= '1';
+      elsif( ( i2cProgValid and i2cProgRdy ) = '1' ) then
+        i2cProgRun <= '0';
+      end if;
+    end if;
+  end process P_PRG_START;
 
   U_BUS_I2C : entity work.Bus2I2cStreamIF
     port map (
