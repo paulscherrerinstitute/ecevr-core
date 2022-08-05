@@ -20,7 +20,7 @@ use unisim.vcomponents.all;
 entity EcEvrWrapper is
   generic (
     CLK_FREQ_G        : real;
-    BUILD_INFO_G      : std_logic_vector(31 downto 0);
+    GIT_HASH_G        : std_logic_vector(31 downto 0);
     -- i2c address or EEPROM
     EEP_I2C_ADDR_G    : std_logic_vector(7 downto 0) := x"50";
     EEP_I2C_MUX_SEL_G : std_logic_vector(3 downto 0) := "0000";
@@ -413,7 +413,7 @@ begin
       cfgAddr            => i2cProgAddr,
       cfgEepSz2B         => i2cAddr2BMode,
       -- read from emulated eeprom
-      cfgEmul            => eepEmulActive,
+      cfgEmul            => eepEmulActLoc,
 
       don                => i2cProgDone,
       err                => i2cProgErr,
@@ -430,7 +430,7 @@ begin
 
   P_PRG_START : process ( sysClk ) is
   begin
-    if ( rising_edge( clk ) ) then
+    if ( rising_edge( sysClk ) ) then
       if ( sysRst = '1' ) then
         i2cProgRun <= '1';
       elsif( ( i2cProgValid and i2cProgRdy ) = '1' ) then
@@ -566,7 +566,7 @@ begin
       when 1 => v    :=           configReq.net.macAddr(31 downto  0);
       when 2 => v    := x"0000" & std_logic_vector( txPdoTrgCount );
       when 3 => v    :=           configReq.net.ip4Addr;
-      when 4 => v    := BUILD_INFO_G;
+      when 4 => v    := GIT_HASH_G;
       when 5 => v    := configReq.esc.sm3Len & configReq.esc.sm2Len;
       when 6 => v(configRetries'range) := std_logic_vector(configRetries);
       when 7 => v    := configDebug;
