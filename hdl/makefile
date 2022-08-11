@@ -9,6 +9,7 @@ LANSRCS+=Lan9254Pkg.vhd
 LANSRCS+=Lan9254ESCPkg.vhd
 LANSRCS+=IPAddrConfigPkg.vhd
 LANSRCS+=IlaWrappersPkg.vhd
+LANSRCS+=ESCFoEPkg.vhd
 #LANSRCS+=EEPROMContentPkg.vhd
 
 SRCS = $(addprefix $(LAN9254_DIR)/,$(LANSRCS))
@@ -26,8 +27,18 @@ SRCS+=PsiI2cStreamIF.vhd
 SRCS+=EEPROMConfigurator.vhd
 SRCS+=I2cEEPROM.vhd
 SRCS+=EEPROMConfiguratorTb.vhd
+SRCS+=SpiBitShifter.vhd
+SRCS+=SpiBitShifterTb.vhd
+SRCS+=FoE2Spi.vhd
+SRCS+=FoE2SpiTb.vhd
 
 eepromconfiguratortb: ana
+	$(GHDL) -e $@
+
+spibitshiftertb: ana
+	$(GHDL) -e $@
+
+foe2spitb: ana
 	$(GHDL) -e $@
 
 ana: $(SRCS)
