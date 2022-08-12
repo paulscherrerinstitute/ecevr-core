@@ -1,26 +1,6 @@
 library ieee;
 use     ieee.std_logic_1164.all;
 use     ieee.numeric_std.all;
-
-package FoE2SpiPkg is
-
-   subtype A24Type is unsigned(23 downto 0);
-
-   type FlashFileType is record
-      id        : std_logic_vector(7 downto 0);
-      -- start address -- must be aligned to erase block size
-      begAddr   : A24Type;
-      -- last address; endAddr + 1 must be aligned to erase block size
-      endAddr   : A24Type;
-   end record FlashFileType;
-
-   type FlashFileArray is array (natural range <>) of FlashFileType;
-
-end package FoE2SpiPkg;
-
-library ieee;
-use     ieee.std_logic_1164.all;
-use     ieee.numeric_std.all;
 use     ieee.math_real.all;
 
 
@@ -41,16 +21,20 @@ entity FoE2Spi is
       EN_SIM_G            : boolean := false
    );
    port (
-      clk     : in  std_logic;
-      rst     : in  std_logic;
+      clk                 : in  std_logic;
+      rst                 : in  std_logic;
 
-      foeMst  : in  FoEMstType;
-      foeSub  : out FoESubType;
+      foeMst              : in  FoEMstType;
+      foeSub              : out FoESubType;
 
-      sclk    : out std_logic;
-      mosi    : out std_logic;
-      miso    : in  std_logic := '1';
-      scsb    : out std_logic
+      sclk                : out std_logic;
+      mosi                : out std_logic;
+      miso                : in  std_logic := '1';
+      scsb                : out std_logic;
+
+      progress            : out std_logic_vector( 1 downto 0);
+
+      debug               : out std_logic_vector(63 downto 0)
    );
 end entity FoE2Spi;
 
@@ -93,15 +77,15 @@ architecture Impl of FoE2Spi is
    constant PRG_IDX_DEASS_CSB_C   : natural := 0;
    constant PRG_END_DEASS_CSB_C   : natural := 0;
 
-   constant PRG_IDX_STATUS_C      : natural := 1;
-   constant PRG_END_STATUS_C      : natural := 2;
+   constant PRG_IDX_STATUS_C      : natural := PRG_END_DEASS_CSB_C + 1;
+   constant PRG_END_STATUS_C      : natural := PRG_IDX_STATUS_C    + 1;
 
-   constant PRG_IDX_WREN_C        : natural := 3;
-   constant PRG_END_WREN_C        : natural := 4;
+   constant PRG_IDX_WREN_C        : natural := PRG_END_STATUS_C    + 1;
+   constant PRG_END_WREN_C        : natural := PRG_IDX_WREN_C      + 2;
 
-   constant PRG_IDX_CMD_C         : natural := 5;
+   constant PRG_IDX_CMD_C         : natural := PRG_END_WREN_C      + 1;
 
-   constant PRG_END_PAGE_WR_C     : natural := PRG_IDX_CMD_C + 3;
+   constant PRG_END_PAGE_WR_C     : natural := PRG_IDX_CMD_C       + 3;
 
    constant PRG_TBL_C             : ProgArray := (
       -- can use sequence of 3 to 
@@ -113,8 +97,10 @@ architecture Impl of FoE2Spi is
          ( CSB_ACT_C     &  SPICMD_ONES_C      ),
 
       PRG_IDX_WREN_C           =>
-         ( CSB_ACT_C     &  SPICMD_WR_ENABLE_C ),
+         ( CSB_NOT_ACT_C &  SPICMD_ONES_C      ),
       PRG_IDX_WREN_C      + 1  =>
+         ( CSB_ACT_C     &  SPICMD_WR_ENABLE_C ),
+      PRG_IDX_WREN_C      + 2  =>
          ( CSB_NOT_ACT_C &  SPICMD_ONES_C      )
    );
 
@@ -143,6 +129,8 @@ architecture Impl of FoE2Spi is
       cnt         : CounterType;
       lastSeen    : boolean;
       overrun     : boolean;
+      eraseBlink  : unsigned(1 downto 0);
+      writeBlink  : unsigned(3 downto 0);
    end record RegType;
 
    constant REG_INIT_C : RegType := (
@@ -161,7 +149,9 @@ architecture Impl of FoE2Spi is
       len         => 0,
       cnt         => 0,
       lastSeen    => false,
-      overrun     => false
+      overrun     => false,
+      eraseBlink  => (others => '0'),
+      writeBlink  => (others => '0')
    );
 
    procedure schedProg(
@@ -182,13 +172,14 @@ architecture Impl of FoE2Spi is
       v.state     := RUN_PROG;
    end procedure schedProg;
 
-   procedure schedStatusPoll(variable v : inout RegType; constant deass : boolean := false) is
+   procedure schedStatusPoll(variable v : inout RegType; constant deass : boolean := true) is
       variable  beg : natural;
    begin
       if ( deass ) then
          beg := PRG_IDX_DEASS_CSB_C;
       else
-         beg := PRG_IDX_STATUS_C;
+         -- just shift ones
+         beg := PRG_END_STATUS_C;
       end if;
       schedProg(v, beg, PRG_END_STATUS_C);
    end procedure schedStatusPoll;
@@ -212,6 +203,7 @@ architecture Impl of FoE2Spi is
    begin
       return a1(a1'left downto LD_ERASE_BLK_SIZE_G) = a2(a2'left downto LD_ERASE_BLK_SIZE_G);
    end function sameBlk;
+
 
    signal r         : RegType := REG_INIT_C;
    signal rin       : RegType;
@@ -246,6 +238,20 @@ begin
           or ( EN_SIM_G                 )
           report "invalid flash block size" severity failure;
 
+   debug(3 downto 0)         <= toSlv( r.idx, 4 );
+   debug(6 downto 4)         <= toSlv( StateType'pos( r.state ), 3 );
+   debug(7)                  <= r.foeSub.done;
+   debug(8)                  <= foeMst.doneAck;
+   debug(9)                  <= r.foeSub.strmRdy;
+   debug(10)                 <= foeMst.strmMst.valid;
+   debug(11)                 <= foeMst.strmMst.last;
+   debug(12)                 <= wrVld;
+   debug(13)                 <= wrRdy;
+   debug(14)                 <= rdVld;
+   debug(15)                 <= rdRdy;
+   debug(23 downto 16)       <= rdDat;
+   debug(31 downto 24)       <= wrDat;
+   debug(63 downto 32)       <= (others => '0');
 
    P_COMB : process ( r, wrRdy, rdVld, rdDat, foeMst ) is
       variable v : RegType;
@@ -323,19 +329,21 @@ begin
 
          when ERASE =>
             if ( not r.progDone ) then
-               schedStatusPoll( v, deass => true );
+               schedStatusPoll( v );
             else
                v.progDone := false;
                if ( r.rdDat(SPI_ST0_BUSY_IDX_C) = '0' ) then
                   if    ( foeMst.err = '1' ) then
                      schedDeactCS( v );
-                     v.retState := DONE;
+                     v.retState    := DONE;
                   elsif ( sameBlk( r.addr, r.laddr ) ) then
-                     v.addr  := FILE_MAP_G( foeMst.fileIdx ).begAddr;
-                     v.state := START_WRITE_PAGE;
+                     v.addr        := FILE_MAP_G( foeMst.fileIdx ).begAddr;
+                     v.state       := START_WRITE_PAGE;
+                     v.eraseBlink  := (others => '0');
                   else
-                     v.addr  := r.addr + BLK_SIZE_C;
-                     v.state := START_ERASE;
+                     v.addr        := r.addr + BLK_SIZE_C;
+                     v.state       := START_ERASE;
+                     v.eraseBlink  := r.eraseBlink + 1;
                   end if;
                end if;
             end if;
@@ -389,7 +397,7 @@ begin
 
          when WAIT_PAGEWR =>
             if ( not r.progDone ) then
-               schedStatusPoll( v, deass => true );
+               schedStatusPoll( v );
             else
                v.progDone := false;
                if ( r.rdDat(SPI_ST0_BUSY_IDX_C) = '0' ) then
@@ -398,16 +406,19 @@ begin
                         v.foeSub.abort := '1';
                      end if;
                      schedDeactCS( v );
-                     v.retState := DONE;
+                     v.retState    := DONE;
                   else
-                     v.state    := START_WRITE_PAGE;
+                     v.state       := START_WRITE_PAGE;
+                     v.writeBlink  := r.writeBlink + 1;
                   end if;
                end if;
             end if;
 
          when DONE =>
+            v.eraseBlink := (others => '0');
+            v.writeBlink := (others => '0');
             if ( (not r.foeSub.done and not foeMst.fifoRst) = '1' ) then
-               v.foeSub.done := '1';
+               v.foeSub.done  := '1';
             elsif ( (r.foeSub.done and foeMst.doneAck) = '1' ) then
                v.foeSub.done  := '0';
                v.foeSub.abort := '0';
@@ -452,6 +463,9 @@ begin
          serCsb  => scsb
       );
 
-   spiRst <= rst;
+   spiRst      <= rst;
+
+   progress(1) <= r.writeBlink(r.writeBlink'left);
+   progress(0) <= r.eraseBlink(r.eraseBlink'left);
 
 end architecture Impl;

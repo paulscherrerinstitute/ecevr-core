@@ -13,6 +13,8 @@ use work.EvrTxPDOPkg.all;
 use work.Evr320ConfigPkg.all;
 use work.EEPROMConfigPkg.all;
 use work.EcEvrBspPkg.all;
+use work.ESCFoEPkg.all;
+use work.FoE2SpiPkg.all;
 
 library unisim;
 use unisim.vcomponents.all;
@@ -23,11 +25,18 @@ entity EcEvrWrapper is
     GIT_HASH_G        : std_logic_vector(31 downto 0);
     -- i2c address or EEPROM
     EEP_I2C_ADDR_G    : std_logic_vector(7 downto 0) := x"50";
-    EEP_I2C_MUX_SEL_G : std_logic_vector(3 downto 0) := "0000";
     -- i2c mux selector for EEPROM
+    EEP_I2C_MUX_SEL_G : std_logic_vector(3 downto 0) := "0000";
+    -- FOE disabled if the file map is empty
+    SPI_FILE_MAP_G    : FlashFileArray := FLASH_FILE_ARRAY_EMPTY_C;
+    SPI_CLK_FREQ_G    : real    := 10.0E6;
+    -- erase block size
+    SPI_LD_BLK_SZ_G   : natural := 16;
+    SPI_LD_PAGE_SZ_G  : natural := 8;
     GEN_HBI_ILA_G     : boolean := true;
     GEN_ESC_ILA_G     : boolean := true;
     GEN_EOE_ILA_G     : boolean := true;
+    GEN_FOE_ILA_G     : boolean := true;
     GEN_U2B_ILA_G     : boolean := true;
     GEN_CNF_ILA_G     : boolean := true;
     GEN_I2C_ILA_G     : boolean := true;
@@ -76,6 +85,11 @@ entity EcEvrWrapper is
     escDebug          : out    std_logic_vector(23 downto 0);
     eepEmulActive     : out    std_logic;
 
+    spiMst            : out    BspSpiMstType := BSP_SPI_MST_INIT_C;
+    spiSub            : in     BspSpiSubType := BSP_SPI_SUB_INIT_C;
+
+    file0WP           : in     std_logic     := '0';
+
     timingMGTStatus   : in     std_logic_vector(31 downto 0) := (others => '0');
 
     timingRecClk      : in     std_logic;
@@ -112,6 +126,8 @@ architecture Impl of EcEvrWrapper is
   constant I2C_MST_CFG_C            : natural :=  0;
   constant I2C_MST_BUS_C            : natural :=  1;
   constant I2C_MST_PRG_C            : natural :=  2;
+
+  constant GEN_FOE_C                : boolean := (SPI_FILE_MAP_G'length > 0 );
 
   signal configReq      : EEPROMConfigReqType;
   signal configAck      : EEPROMConfigAckType := EEPROM_CONFIG_ACK_ASSERT_C;
@@ -173,14 +189,23 @@ architecture Impl of EcEvrWrapper is
 
   signal sda_o_loc, scl_o_loc, sda_t_loc, scl_t_loc : std_logic_vector(NUM_I2C_C - 1 downto 0);
 
-  signal i2cProgRun   : std_logic := '1';
+  signal i2cProgRun   : std_logic     := '1';
   signal i2cProgValid : std_logic;
   signal i2cProgRdy   : std_logic;
   signal i2cProgFound : std_logic;
   signal i2cProgAddr  : unsigned(15 downto 0);
   signal i2cProgDone  : std_logic;
-  signal i2cProgAck   : std_logic := '1';
+  signal i2cProgAck   : std_logic     := '1';
   signal i2cProgErr   : std_logic;
+
+  signal foeMst       : FoEMstType    := FOE_MST_INIT_C;
+  signal foeSub       : FoESubType    := FOE_SUB_ASSERT_C;
+  signal foeSubLoc    : FoESubType    := FOE_SUB_ASSERT_C;
+
+  signal spiMstLoc    : BspSpiMstType := BSP_SPI_MST_INIT_C;
+
+  signal spiDebug     : std_logic_vector(63 downto 0);
+  signal foeDebug     : std_logic_vector(63 downto 0);
 
 begin
 
@@ -225,6 +250,7 @@ begin
       NUM_BUS_MSTS_G        => NUM_BUS_MSTS_C,
       NUM_EXT_HBI_MASTERS_G => NUM_HBI_MSTS_C,
       EXT_HBI_MASTERS_PRI_G => PRI_HBI_MSTS_C,
+      FOE_FILE_MAP_G        => toFoEFileNameMap( SPI_FILE_MAP_G ),
       -- our EvrTxPDO talks to the HBI directly
       DISABLE_TXPDO_G       => true,
       GEN_ESC_ILA_G         => GEN_ESC_ILA_G,
@@ -268,10 +294,15 @@ begin
       rxPDOMst        => rxPDOMst,
       rxPDORdy        => rxPDORdy,
 
+      foeMst          => foeMst,
+      foeSub          => foeSub,
+
       irq             => lan9254_irq,
 
       testFailed      => testFailed,
-      stats           => escStats
+      stats           => escStats,
+
+      foeDebug        => foeDebug
     );
 
   U_EVR : entity work.evr320_udp2bus_wrapper
@@ -480,7 +511,60 @@ begin
       i2cSdaOut          => sda_o_loc,
       i2cSdaHiZ          => sda_t_loc
     );
-     
+
+  G_FOE_SPI : if ( GEN_FOE_C ) generate
+    U_FOE2SPI : entity work.FoE2Spi
+      generic map (
+        FILE_MAP_G          => SPI_FILE_MAP_G,
+        CLOCK_FREQ_G        => CLK_FREQ_G,
+        SPI_CLOCK_FREQ_G    => SPI_CLK_FREQ_G,
+        LD_ERASE_BLK_SIZE_G => SPI_LD_BLK_SZ_G,
+        LD_PAGE_SIZE_G      => SPI_LD_PAGE_SZ_G
+      )
+      port map (
+        clk                 => sysClk,
+        rst                 => sysRst,
+
+        foeMst              => foeMst,
+        foeSub              => foeSubLoc,
+
+        sclk                => spiMstLoc.sclk,
+        mosi                => spiMstLoc.mosi,
+        scsb                => spiMstLoc.csel,
+        miso                => spiSub.miso,
+
+        progress            => spiMstLoc.util,
+
+        debug               => spiDebug
+      );
+
+    P_WP : process ( file0WP, foeSubLoc ) is
+    begin
+      foeSub         <= foeSubLoc;
+      foeSub.file0WP <= file0WP;
+    end process P_WP;
+   
+
+    GEN_ILA : if ( GEN_FOE_ILA_G ) generate
+      signal probe2 : std_logic_vector(63 downto 0);
+    begin
+      probe2(0)           <= spiMstLoc.sclk;
+      probe2(1)           <= spiMstLoc.csel;
+      probe2(2)           <= spiMstLoc.mosi;
+      probe2(3)           <= spiSub.miso;
+      probe2(4)           <= spiMstLoc.util(0);
+      probe2(5)           <= spiMstLoc.util(1);
+      probe2(63 downto 6) <= (others => '0');
+      U_ILA : Ila_256
+        port map (
+          clk         => sysClk,
+          probe0      => foeDebug,
+          probe1      => spiDebug,
+          probe2      => probe2,
+          probe3      => (others => '0')
+        );
+    end generate GEN_ILA;
+  end generate G_FOE_SPI;
 
   G_EEP_ILA : if ( GEN_EEP_ILA_G ) generate
     signal clkdiv : unsigned(5 downto 0) := (others => '0');
@@ -583,6 +667,8 @@ begin
   i2c_scl_t     <= scl_t_loc;
   i2c_sda_o     <= sda_o_loc;
   i2c_sda_t     <= sda_t_loc;
+
+  spiMst        <= spiMstLoc;
 
   eepEmulActive <= eepEmulActLoc;
 

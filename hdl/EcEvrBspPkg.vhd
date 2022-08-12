@@ -6,21 +6,32 @@ package EcEvrBspPkg is
 
    type Lan9254ImageType is (HBI16M, SPI_GPIO, DIGIO);
 
-   type BspSpiType is record
+   type BspSpiMstType is record
       sclk : std_logic;
       mosi : std_logic;
-      miso : std_logic;
       csel : std_logic;
-   end record BspSpiType;
+      util : std_logic_vector(1 downto 0);
+   end record BspSpiMstType;
 
-   constant BSP_SPI_INIT_C : BspSpiType := (
+   type BspSpiSubType is record
+      miso : std_logic;
+   end record BspSpiSubType;
+
+
+   constant BSP_SPI_MST_INIT_C : BspSpiMstType := (
       sclk => '0',
       mosi => '0',
-      miso => '0',
-      csel => '1'
+      csel => '1',
+      util => (others => '0')
    );
 
-   type BspSpiArray is array (integer range <>) of BspSpiType;
+   constant BSP_SPI_SUB_INIT_C : BspSpiSubType := (
+      miso => '1'
+   );
+
+
+   type BspSpiMstArray is array (integer range <>) of BspSpiMstType;
+   type BspSpiSubArray is array (integer range <>) of BspSpiSubType;
 
    component XilIOBuf is
       generic (

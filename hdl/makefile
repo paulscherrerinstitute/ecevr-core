@@ -2,6 +2,7 @@
 LAN9254_DIR=../../lan9254-rtl-esc/hdl
 EVR320_DIR=../../evr320/hdl
 PSI_COMMON_DIR=../../psi_common/hdl
+UNISIM_DIR=/opt/ghdl/v1.0.0-gcc/vivado-2018.03/
 GHDL=ghdl
 
 LANSRCS+=ESCBasicTypesPkg.vhd
@@ -10,6 +11,8 @@ LANSRCS+=Lan9254ESCPkg.vhd
 LANSRCS+=IPAddrConfigPkg.vhd
 LANSRCS+=IlaWrappersPkg.vhd
 LANSRCS+=ESCFoEPkg.vhd
+LANSRCS+=MicroUDPPkg.vhd
+LANSRCS+=Udp2BusPkg.vhd
 #LANSRCS+=EEPROMContentPkg.vhd
 
 SRCS = $(addprefix $(LAN9254_DIR)/,$(LANSRCS))
@@ -21,6 +24,8 @@ SRCS+=$(addprefix $(EVR320_DIR)/,evr320_pkg.vhd)
 SRCS+=Evr320ConfigPkg.vhd
 SRCS+=EEPROMConfigPkg.vhd
 SRCS+=EEPROMContentPkg.vhd
+SRCS+=FoE2SpiPkg.vhd
+SRCS+=EcEvrBspPkg.vhd
 SRCS+=$(addprefix $(PSI_COMMON_DIR)/,psi_common_bit_cc.vhd)
 SRCS+=$(addprefix $(PSI_COMMON_DIR)/,psi_common_i2c_master.vhd)
 SRCS+=PsiI2cStreamIF.vhd
@@ -31,6 +36,7 @@ SRCS+=SpiBitShifter.vhd
 SRCS+=SpiBitShifterTb.vhd
 SRCS+=FoE2Spi.vhd
 SRCS+=FoE2SpiTb.vhd
+SRCS+=EcEvrWrapper.vhd
 
 eepromconfiguratortb: ana
 	$(GHDL) -e $@
@@ -42,7 +48,7 @@ foe2spitb: ana
 	$(GHDL) -e $@
 
 ana: $(SRCS)
-	$(GHDL) -a -P$(LAN9254_DIR) $(SRCS)
+	$(GHDL) -a -P$(LAN9254_DIR) $(addprefix -P, $(UNISIM_DIR)) $(SRCS)
 
 EEPROMContentPkg.vhd:
 	$(LAN9254_DIR)/../tool/EsiTool.py -V eeprom_config_tst.xml

@@ -21,9 +21,9 @@ entity EcEvrBoardMap is
 
     -- SPI image
 
-    spiMst          : in  BspSpiType := BSP_SPI_INIT_C;
+    spiMst          : in  BspSpiMstType := BSP_SPI_MST_INIT_C;
     -- provides readback of sck/sdo/scs from digital io
-    spiSub          : out BspSpiType;
+    spiSub          : out BspSpiSubType;
 
     -- GPIO direction must match setup in EEPROM!
     gpio_i          : out std_logic_vector(31 downto 0);
@@ -142,7 +142,7 @@ begin
   P_LAN_2_FPGA : process ( imageSel, fpga_i, irq_i ) is
   begin
     -- set defaults
-    spiSub        <= BSP_SPI_INIT_C;
+    spiSub        <= BSP_SPI_SUB_INIT_C;
     gpio_i        <= (others => '0');
     dioSOF        <= '0';
     dioEOF        <= '0';
@@ -176,10 +176,7 @@ begin
         end loop;
 
         if ( imageSel = SPI_GPIO ) then
-          spiSub.mosi <= fpga_i(10);
-          spiSub.sclk <= fpga_i(15);
           spiSub.miso <= fpga_i( 5);
-          spiSub.csel <= fpga_i(40);
         else
           for i in 16 to 31 loop
             gpio_i(i) <= fpga_i( DIGIO_MAP_C( i ) );
