@@ -207,6 +207,8 @@ architecture Impl of EcEvrWrapper is
   signal spiDebug     : std_logic_vector(63 downto 0);
   signal foeDebug     : std_logic_vector(63 downto 0);
 
+  signal progress     : std_logic_vector( 3 downto 0);
+
 begin
 
   busSubRep(NUM_BUS_SUBS_C - 1 downto NUM_LOC_SUBS_C) <= busReps;
@@ -533,16 +535,19 @@ begin
         scsb                => spiMstLoc.csel,
         miso                => spiSub.miso,
 
-        progress            => spiMstLoc.util,
+        progress            => progress,
 
         debug               => spiDebug
       );
 
-    P_WP : process ( file0WP, foeSubLoc ) is
+    P_MISC : process ( file0WP, foeSubLoc, progress ) is
     begin
-      foeSub         <= foeSubLoc;
-      foeSub.file0WP <= file0WP;
-    end process P_WP;
+      foeSub                         <= foeSubLoc;
+      foeSub.file0WP                 <= file0WP;
+
+      spiMstLoc.util                 <= (others => '0');
+      spiMstLoc.util(progress'range) <= progress;
+    end process P_MISC;
    
 
     GEN_ILA : if ( GEN_FOE_ILA_G ) generate

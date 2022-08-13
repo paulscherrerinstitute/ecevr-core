@@ -32,7 +32,7 @@ entity FoE2Spi is
       miso                : in  std_logic := '1';
       scsb                : out std_logic;
 
-      progress            : out std_logic_vector( 1 downto 0);
+      progress            : out std_logic_vector( 3 downto 0);
 
       debug               : out std_logic_vector(63 downto 0)
    );
@@ -131,6 +131,9 @@ architecture Impl of FoE2Spi is
       overrun     : boolean;
       eraseBlink  : unsigned(1 downto 0);
       writeBlink  : unsigned(3 downto 0);
+      -- also provide static (non-blinking) flags
+      erasing     : std_logic;
+      writing     : std_logic;
    end record RegType;
 
    constant REG_INIT_C : RegType := (
@@ -152,6 +155,8 @@ architecture Impl of FoE2Spi is
       overrun     => false,
       eraseBlink  => (others => '0'),
       writeBlink  => (others => '0')
+      erasing     => '0',
+      writing     => '0'
    );
 
    procedure schedProg(
@@ -219,6 +224,8 @@ architecture Impl of FoE2Spi is
 
    signal csb       : std_logic;
 
+   signal foeSubLoc : FoeSubType;
+
 begin
 
    G_CHECK : for i in FILE_MAP_G'range generate
@@ -242,7 +249,7 @@ begin
    debug(6 downto 4)         <= toSlv( StateType'pos( r.state ), 3 );
    debug(7)                  <= r.foeSub.done;
    debug(8)                  <= foeMst.doneAck;
-   debug(9)                  <= r.foeSub.strmRdy;
+   debug(9)                  <= foeSubLoc.strmRdy;
    debug(10)                 <= foeMst.strmMst.valid;
    debug(11)                 <= foeMst.strmMst.last;
    debug(12)                 <= wrVld;
@@ -256,13 +263,13 @@ begin
    P_COMB : process ( r, wrRdy, rdVld, rdDat, foeMst ) is
       variable v : RegType;
    begin
-      v     := r;
+      v                  := r;
 
-      foeSub          <= r.foeSub;
-      wrVld           <= '0';
-      rdRdy           <= '0';
-      foeSub.strmRdy  <= '0';
-      csb             <= r.csb;
+      foeSubLoc          <= r.foeSub;
+      wrVld              <= '0';
+      rdRdy              <= '0';
+      foeSubLoc.strmRdy  <= '0';
+      csb                <= r.csb;
 
       if ( (r.wrVld and wrRdy) = '1' ) then
          v.wrVld := '0';
@@ -320,6 +327,7 @@ begin
             end if;
 
          when START_ERASE =>
+            v.erasing := '1';
             if ( not r.progDone ) then
                schedEraseBlock( v );
             else
@@ -349,6 +357,8 @@ begin
             end if;
 
          when START_WRITE_PAGE =>
+            v.erasing := '0';
+            v.writing := '1';
             if ( not r.progDone ) then
                schedWritePage( v );
             else
@@ -367,8 +377,8 @@ begin
                   v.retState := DONE;
                else
                   -- take the next byte to the SPI module
-                  wrVld           <= foeMst.strmMst.valid;
-                  foeSub.strmRdy  <= wrRdy;
+                  wrVld              <= foeMst.strmMst.valid;
+                  foeSubLoc.strmRdy  <= wrRdy;
                   if ( ( foeMst.strmMst.valid and wrRdy ) = '1' ) then
                      -- it has been accepted; now wait for the reply
                      v.rdRdy    := '1';
@@ -415,6 +425,8 @@ begin
             end if;
 
          when DONE =>
+            v.erasing    := '0';
+            v.writing    := '0';
             v.eraseBlink := (others => '0');
             v.writeBlink := (others => '0');
             if ( (not r.foeSub.done and not foeMst.fifoRst) = '1' ) then
@@ -463,8 +475,11 @@ begin
          serCsb  => scsb
       );
 
+   foeSub      <= foeSubLoc;
    spiRst      <= rst;
 
+   progress(3) <= r.writing;
+   progress(2) <= r.erasing;
    progress(1) <= r.writeBlink(r.writeBlink'left);
    progress(0) <= r.eraseBlink(r.eraseBlink'left);
 

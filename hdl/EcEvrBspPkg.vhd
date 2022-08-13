@@ -10,7 +10,7 @@ package EcEvrBspPkg is
       sclk : std_logic;
       mosi : std_logic;
       csel : std_logic;
-      util : std_logic_vector(1 downto 0);
+      util : std_logic_vector(7 downto 0);
    end record BspSpiMstType;
 
    type BspSpiSubType is record
