@@ -154,7 +154,7 @@ architecture Impl of FoE2Spi is
       lastSeen    => false,
       overrun     => false,
       eraseBlink  => (others => '0'),
-      writeBlink  => (others => '0')
+      writeBlink  => (others => '0'),
       erasing     => '0',
       writing     => '0'
    );
