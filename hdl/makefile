@@ -36,7 +36,8 @@ SRCS+=SpiBitShifter.vhd
 SRCS+=SpiBitShifterTb.vhd
 SRCS+=FoE2Spi.vhd
 SRCS+=FoE2SpiTb.vhd
-SRCS+=EcEvrWrapper.vhd
+SRCS+=IcapE2Reg.vhd
+SRCS+=IcapE2RegTb.vhd
 
 eepromconfiguratortb: ana
 	$(GHDL) -e $@
@@ -47,6 +48,9 @@ spibitshiftertb: ana
 foe2spitb: ana
 	$(GHDL) -e $@
 
+icape2regtb: ana
+	$(GHDL) -e $(addprefix -P,$(UNISIM_DIR)) -fsynopsys $@
+
 ana: $(SRCS)
 	$(GHDL) -a -P$(LAN9254_DIR) $(addprefix -P, $(UNISIM_DIR)) $(SRCS)
 
@@ -56,4 +60,4 @@ EEPROMContentPkg.vhd:
 .PHONY: ana clean
 
 clean:
-	$(RM) eepromconfiguratortb $(notdir $(SRCS:%.vhd=%.o)) work-obj93.cf e~eepromconfiguratortb.o
+	$(RM) eepromconfiguratortb $(notdir $(SRCS:%.vhd=%.o)) work-obj93.cf e~eepromconfiguratortb.o icape2regtb foe2spitb spibitshiftertb
