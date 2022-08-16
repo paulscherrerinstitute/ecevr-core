@@ -7,6 +7,7 @@ use     work.ESCBasicTypesPkg.all;
 use     work.Lan9254Pkg.all;
 use     work.ESCFoEPkg.all;
 use     work.FoE2SpiPkg.all;
+use     work.Udp2BusPkg.all;
 
 entity FoE2SpiTb is
 end entity FoE2SpiTb;
@@ -22,6 +23,9 @@ architecture Sim of FoE2SpiTb is
 
   signal foeMst : FoEMstType := FOE_MST_INIT_C;
   signal foeSub : FoESubType := FOE_SUB_ASSERT_C;
+
+  signal busReq : Udp2BusReqType := UDP2BUSREQ_INIT_C;
+  signal busRep : Udp2BusRepType;
 
   signal ser : std_logic;
 begin
@@ -85,6 +89,9 @@ begin
 
       foeMst  => foeMst,
       foeSub  => foeSub,
+
+      busReq  => busReq,
+      busRep  => busRep,
 
       miso    => ser,
       mosi    => open

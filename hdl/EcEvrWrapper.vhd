@@ -122,10 +122,10 @@ architecture Impl of EcEvrWrapper is
 
   constant MAX_TXPDO_SEGMENTS_C     : natural := 16;
 
-  constant NUM_I2C_MST_C            : natural :=  3;
+  constant NUM_I2C_MST_C            : natural :=  2;
   constant I2C_MST_CFG_C            : natural :=  0;
-  constant I2C_MST_BUS_C            : natural :=  1;
-  constant I2C_MST_PRG_C            : natural :=  2;
+  constant I2C_MST_PRG_C            : natural :=  1;
+  constant I2C_MST_BUS_C            : natural :=  2;
 
   constant GEN_FOE_C                : boolean := (SPI_FILE_MAP_G'length > 0 );
 
@@ -472,20 +472,20 @@ begin
     end if;
   end process P_PRG_START;
 
-  U_BUS_I2C : entity work.Bus2I2cStreamIF
-    port map (
-      clk                => sysClk,
-      rst                => sysRst,
-
-      busReq             => busSubReq(BUS_SIDX_I2C_C),
-      busRep             => busSubRep(BUS_SIDX_I2C_C),
-
-      strmMstOb          => i2cStrmReqMst(I2C_MST_BUS_C),
-      strmRdyOb          => i2cStrmReqRdy(I2C_MST_BUS_C),
-      strmMstIb          => i2cStrmRepMst(I2C_MST_BUS_C),
-      strmRdyIb          => i2cStrmRepRdy(I2C_MST_BUS_C),
-      strmLock           => i2cStrmLock  (I2C_MST_BUS_C)
-    );
+--  U_BUS_I2C : entity work.Bus2I2cStreamIF
+--    port map (
+--      clk                => sysClk,
+--      rst                => sysRst,
+--
+--      busReq             => busSubReq(BUS_SIDX_I2C_C),
+--      busRep             => busSubRep(BUS_SIDX_I2C_C),
+--
+--      strmMstOb          => i2cStrmReqMst(I2C_MST_BUS_C),
+--      strmRdyOb          => i2cStrmReqRdy(I2C_MST_BUS_C),
+--      strmMstIb          => i2cStrmRepMst(I2C_MST_BUS_C),
+--      strmRdyIb          => i2cStrmRepRdy(I2C_MST_BUS_C),
+--      strmLock           => i2cStrmLock  (I2C_MST_BUS_C)
+--    );
 
   U_I2C_MST : entity work.I2cWrapper
     generic map (
@@ -529,6 +529,9 @@ begin
 
         foeMst              => foeMst,
         foeSub              => foeSubLoc,
+
+        busReq              => busSubReq(BUS_SIDX_I2C_C),
+        busRep              => busSubRep(BUS_SIDX_I2C_C),
 
         sclk                => spiMstLoc.sclk,
         mosi                => spiMstLoc.mosi,

@@ -8,6 +8,7 @@ use work.ESCBasicTypesPkg.all;
 use work.Lan9254Pkg.all;
 use work.ESCFoEPkg.all;
 use work.FoE2SpiPkg.all;
+use work.Udp2BusPkg.all;
 
 entity FoE2Spi is
    generic (
@@ -15,7 +16,12 @@ entity FoE2Spi is
       CLOCK_FREQ_G        : real;
       SPI_CLOCK_FREQ_G    : real    := 10.0E6;
       LD_ERASE_BLK_SIZE_G : natural := 16;
+      -- flash page size (for writing)
       LD_PAGE_SIZE_G      : natural := 8;
+      -- SPI readback via UDP page size
+      -- (necessary because the supported address range
+      -- does not cover a full flash device)
+      LD_BUS_PAGE_SIZE_G  : natural range 2 to 20 :=16;
       -- enable unrealistic settings
       -- for simulation/testing *DO NOT USE*
       EN_SIM_G            : boolean := false
@@ -26,6 +32,9 @@ entity FoE2Spi is
 
       foeMst              : in  FoEMstType;
       foeSub              : out FoESubType;
+
+      busReq              : in  Udp2BusReqType := UDP2BUSREQ_INIT_C;
+      busRep              : out Udp2BusRepType;
 
       sclk                : out std_logic;
       mosi                : out std_logic;
@@ -87,6 +96,8 @@ architecture Impl of FoE2Spi is
 
    constant PRG_END_PAGE_WR_C     : natural := PRG_IDX_CMD_C       + 3;
 
+   constant NUM_SPI_MST_C         : natural := 2;
+
    constant PRG_TBL_C             : ProgArray := (
       -- can use sequence of 3 to 
       PRG_IDX_DEASS_CSB_C      =>
@@ -134,6 +145,7 @@ architecture Impl of FoE2Spi is
       -- also provide static (non-blinking) flags
       erasing     : std_logic;
       writing     : std_logic;
+      spiClaim    : std_logic;
    end record RegType;
 
    constant REG_INIT_C : RegType := (
@@ -156,8 +168,16 @@ architecture Impl of FoE2Spi is
       eraseBlink  => (others => '0'),
       writeBlink  => (others => '0'),
       erasing     => '0',
-      writing     => '0'
+      writing     => '0',
+      spiClaim    => '0'
    );
+
+   type SpiMuxStateType is ( IDLE, FOE, UDP );
+
+   constant SPI_MUX_STATE_INIT_C : SpiMuxStateType := IDLE;
+
+   signal spiMuxState   : SpiMuxStateType := SPI_MUX_STATE_INIT_C;
+   signal spiMuxStateIn : SpiMuxStateType;
 
    procedure schedProg(
       variable   v  : inout RegType;
@@ -210,21 +230,39 @@ architecture Impl of FoE2Spi is
    end function sameBlk;
 
 
-   signal r         : RegType := REG_INIT_C;
-   signal rin       : RegType;
+   signal r               : RegType := REG_INIT_C;
+   signal rin             : RegType;
 
-   signal rdRdy     : std_logic;
-   signal wrRdy     : std_logic;
-   signal rdVld     : std_logic;
-   signal rdDat     : std_logic_vector(7 downto 0);
-   signal wrDat     : std_logic_vector(7 downto 0);
-   signal wrVld     : std_logic;
+   signal rdRdy           : std_logic;
+   signal wrRdy           : std_logic;
+   signal rdVld           : std_logic;
+   signal wrVld           : std_logic;
+   signal rdDat           : std_logic_vector(7 downto 0);
+   signal wrDat           : std_logic_vector(7 downto 0);
+   signal csb             : std_logic;
 
-   signal spiRst    : std_logic;
 
-   signal csb       : std_logic;
+   signal wrVldFoE        : std_logic;
+   signal wrRdyFoE        : std_logic;
+   signal wrDatFoE        : std_logic_vector(7 downto 0);
+   signal rdVldFoE        : std_logic;
+   signal rdRdyFoE        : std_logic;
+   signal csbFoE          : std_logic;
+   signal spiClaimFoE     : std_logic;
+   signal spiGrantFoE     : std_logic;
 
-   signal foeSubLoc : FoeSubType;
+   signal wrVldBus        : std_logic;
+   signal wrRdyBus        : std_logic;
+   signal wrDatBus        : std_logic_vector(7 downto 0);
+   signal rdVldBus        : std_logic;
+   signal rdRdyBus        : std_logic;
+   signal csbBus          : std_logic;
+   signal spiClaimBus     : std_logic;
+   signal spiGrantBus     : std_logic;
+
+   signal spiRst          : std_logic;
+
+   signal foeSubLoc       : FoeSubType;
 
 begin
 
@@ -245,7 +283,7 @@ begin
           or ( EN_SIM_G                 )
           report "invalid flash block size" severity failure;
 
-   debug(3 downto 0)         <= toSlv( r.idx, 4 );
+   debug(3 downto 0)         <= std_logic_vector( resize( to_signed( r.idx, 5 ), 4 ) );
    debug(6 downto 4)         <= toSlv( StateType'pos( r.state ), 3 );
    debug(7)                  <= r.foeSub.done;
    debug(8)                  <= foeMst.doneAck;
@@ -260,36 +298,36 @@ begin
    debug(31 downto 24)       <= wrDat;
    debug(63 downto 32)       <= (others => '0');
 
-   P_COMB : process ( r, wrRdy, rdVld, rdDat, foeMst ) is
+   P_COMB : process ( r, wrRdyFoE, rdVldFoE, rdDat, foeMst, spiGrantFoE ) is
       variable v : RegType;
    begin
       v                  := r;
 
       foeSubLoc          <= r.foeSub;
-      wrVld              <= '0';
-      rdRdy              <= '0';
+      wrVldFoE           <= '0';
+      rdRdyFoE           <= '0';
       foeSubLoc.strmRdy  <= '0';
-      csb                <= r.csb;
+      csbFoE             <= r.csb;
 
-      if ( (r.wrVld and wrRdy) = '1' ) then
+      if ( (r.wrVld and wrRdyFoE) = '1' ) then
          v.wrVld := '0';
       end if;
 
       if    ( r.idx < 0                 ) then
-         wrDat <= foeMst.strmMst.data(7 downto 0);
+         wrDatFoE <= foeMst.strmMst.data(7 downto 0);
       elsif ( r.idx < PRG_IDX_CMD_C     ) then
-         wrDat <= PRG_TBL_C( r.idx )(7 downto 0);
-         csb   <= PRG_TBL_C( r.idx )(8);
+         wrDatFoE <= PRG_TBL_C( r.idx )(7 downto 0);
+         csbFoE   <= PRG_TBL_C( r.idx )(8);
       elsif ( r.idx = PRG_IDX_CMD_C ) then
-         wrDat <= r.cmd;
+         wrDatFoE <= r.cmd;
       elsif ( r.idx = PRG_IDX_CMD_C + 1 ) then
-         wrDat <= std_logic_vector( r.addr(23 downto 16) );
+         wrDatFoE <= std_logic_vector( r.addr(23 downto 16) );
       elsif ( r.idx = PRG_IDX_CMD_C + 2 ) then
-         wrDat <= std_logic_vector( r.addr(15 downto  8) );
+         wrDatFoE <= std_logic_vector( r.addr(15 downto  8) );
       elsif ( r.idx = PRG_IDX_CMD_C + 3 ) then
-         wrDat <= std_logic_vector( r.addr( 7 downto  0) );
+         wrDatFoE <= std_logic_vector( r.addr( 7 downto  0) );
       else
-         wrDat <= r.cmd;
+         wrDatFoE <= r.cmd;
       end if;
 
       case r.state is
@@ -301,21 +339,25 @@ begin
             if ( foeMst.err = '1' ) then
                v.state := DONE;
             elsif ( foeMst.strmMst.valid = '1' ) then
+               v.spiClaim := '1';
                v.addr     := FILE_MAP_G( foeMst.fileIdx ).begAddr;
                v.laddr    := FILE_MAP_G( foeMst.fileIdx ).endAddr;
-               v.state    := START_ERASE;
+               -- wait for the SPI master to become available
+               if ( ( r.spiClaim and spiGrantFoE ) = '1' ) then
+                  v.state    := START_ERASE;
+               end if;
             end if;
 
          -- set csb, cmd, idx and len before entry
          when RUN_PROG =>
-            wrVld <= r.wrVld;
-            rdRdy <= r.rdRdy;
+            wrVldFoE <= r.wrVld;
+            rdRdyFoE <= r.rdRdy;
             if (  (r.rdRdy or r.wrVld)  = '0' ) then
                v.wrVld := '1';
-            elsif ( (r.wrVld and wrRdy) = '1' ) then
+            elsif ( (r.wrVld and wrRdyFoE) = '1' ) then
                v.wrVld := '0';
                v.rdRdy := '1';
-            elsif ( (r.rdRdy and rdVld) = '1' ) then
+            elsif ( (r.rdRdy and rdVldFoE) = '1' ) then
                v.rdRdy := '0';
                v.rdDat := rdDat;
                if ( r.idx = r.len ) then
@@ -370,22 +412,22 @@ begin
 
          -- assume CSB is asserted already
          when WRITE_PAGE =>
-            rdRdy <= r.rdRdy;
+            rdRdyFoE <= r.rdRdy;
             if ( r.rdRdy = '0' ) then
                if ( foeMst.err = '1' ) then
                   schedDeactCS( v );
                   v.retState := DONE;
                else
                   -- take the next byte to the SPI module
-                  wrVld              <= foeMst.strmMst.valid;
-                  foeSubLoc.strmRdy  <= wrRdy;
-                  if ( ( foeMst.strmMst.valid and wrRdy ) = '1' ) then
+                  wrVldFoE           <= foeMst.strmMst.valid;
+                  foeSubLoc.strmRdy  <= wrRdyFoE;
+                  if ( ( foeMst.strmMst.valid and wrRdyFoE ) = '1' ) then
                      -- it has been accepted; now wait for the reply
                      v.rdRdy    := '1';
                      v.lastSeen := (foeMst.strmMst.last = '1');
                   end if;
                end if;
-            elsif ( rdVld = '1' ) then
+            elsif ( rdVldFoE = '1' ) then
                v.rdRdy    := '0';
                v.state    := WAIT_PAGEWR;
                v.progDone := false;
@@ -427,6 +469,7 @@ begin
          when DONE =>
             v.erasing    := '0';
             v.writing    := '0';
+            v.spiClaim   := '0';
             v.eraseBlink := (others => '0');
             v.writeBlink := (others => '0');
             if ( (not r.foeSub.done and not foeMst.fifoRst) = '1' ) then
@@ -445,12 +488,38 @@ begin
    begin
       if ( rising_edge( clk ) ) then
          if ( rst = '1' ) then
-            r <= REG_INIT_C;
+            r             <= REG_INIT_C;
+            spiMuxState   <= SPI_MUX_STATE_INIT_C;
          else
-            r <= rin;
+            r             <= rin;
+            spiMuxState   <= spiMuxStateIn;
          end if;
       end if;
    end process P_SEQ;
+
+   U_BUS2SPI : entity work.Bus2SpiFlashIF
+      generic map (
+         LD_PAGE_SIZE_G => LD_BUS_PAGE_SIZE_G
+      )
+      port map (
+         clk     => clk,
+         rst     => spiRst,
+
+         busReq  => busReq,
+         busRep  => busRep,
+
+         spiReq  => spiClaimBus,
+         spiGnt  => spiGrantBus,
+
+         spiVldI => wrVldBus,
+         spiDatI => wrDatBus,
+         spiCsel => csbBus,
+         spiRdyI => wrRdyBus,
+
+         spiDatO => rdDat,
+         spiVldO => rdVldBus,
+         spiRdyO => rdRdyBus
+      );
 
    U_SPI : entity work.SpiBitShifter
       generic map (
@@ -474,6 +543,69 @@ begin
          serOut  => mosi,
          serCsb  => scsb
       );
+
+   P_SPI_MUX : process (
+      spiMuxState,
+      spiClaimFoE, spiClaimBus,
+      wrVldFoE, wrDatFoE, csbFoE, rdRdyFoE,
+      wrVldBus, wrDatBus, csbBus, rdRdyBus,
+      wrRdy, rdVld
+   ) is
+      variable v : SpiMuxStateType;
+   begin
+      v             := spiMuxState;
+
+      wrDat         <= wrDatFoE;
+      csb           <= CSB_NOT_ACT_C;
+      wrVld         <= '0';
+      rdRdy         <= '0';
+
+      wrRdyFoE      <= '0';
+      wrRdyBus      <= '0';
+      rdVldFoE      <= '0';
+      rdVldBus      <= '0';
+
+      spiGrantFoE   <= '0';
+      spiGrantBus   <= '0';
+
+      case ( v ) is
+         when IDLE =>
+            if    ( spiClaimFoE = '1' ) then
+               v := FOE;
+            elsif ( spiClaimBus = '1' ) then
+               v := UDP;
+            end if;
+         when FOE =>
+            spiGrantFoE <= spiClaimFoE;
+            if ( spiClaimFoE = '0' ) then
+               v := IDLE;
+            end if;
+         when UDP =>
+            spiGrantBus <= spiClaimBus;
+            if ( spiClaimBus = '0' ) then
+               v := IDLE;
+            end if;
+      end case;
+
+      if    ( v = FOE ) then
+         wrVld    <= wrVldFoE;
+         wrRdyFoe <= wrRdy;
+         csb      <= csbFoE;
+         rdVldFoE <= rdVld;
+         rdRdy    <= rdRdyFoE;
+      elsif ( v = UDP ) then
+         wrDat    <= wrDatBus;
+         wrVld    <= wrVldBus;
+         wrRdyBus <= wrRdy;
+         csb      <= csbBus;
+         rdVldBus <= rdVld;
+         rdRdy    <= rdRdyBus;
+      end if;
+      
+      spiMuxStateIn <= v;
+   end process P_SPI_MUX;
+
+   spiClaimFoe <= r.spiClaim;
 
    foeSub      <= foeSubLoc;
    spiRst      <= rst;

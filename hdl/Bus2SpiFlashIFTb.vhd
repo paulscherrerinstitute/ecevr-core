@@ -4,10 +4,10 @@ use ieee.numeric_std.all;
 
 use work.Udp2BusPkg.all;
 
-entity Bus2SpiFlashTb is
-end entity Bus2SpiFlashTb;
+entity Bus2SpiFlashIFTb is
+end entity Bus2SpiFlashIFTb;
 
-architecture sim of Bus2SpiFlashTb is
+architecture sim of Bus2SpiFlashIFTb is
    signal clk : std_logic := '0';
    signal rst : std_logic := '1';
    signal don : boolean   := false;
@@ -121,7 +121,7 @@ begin
       wait;
    end process P_DRV;
 
-   U_DUT : entity work.Bus2SpiFlash
+   U_DUT : entity work.Bus2SpiFlashIF
       generic map (
          LD_PAGE_SIZE_G => 4
       )

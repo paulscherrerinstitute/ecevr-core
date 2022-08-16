@@ -6,7 +6,7 @@ use     ieee.numeric_std.all;
 
 use     work.Udp2BusPkg.all;
 
-entity Bus2SpiFlash is
+entity Bus2SpiFlashIF is
    generic (
       -- since Udp2Bus only supports 22-bit addresses
       -- we break up access to the SPI flash into pages
@@ -35,9 +35,9 @@ entity Bus2SpiFlash is
       spiDatO : in  std_logic_vector(7 downto 0);
       spiRdyO : out std_logic
    );
-end entity;
+end entity Bus2SpiFlashIF;
 
-architecture Impl of Bus2SpiFlash is
+architecture Impl of Bus2SpiFlashIF is
 
    type     SpiPhaseType    is ( ADDR, SWITCH, DATA, CSHI );
    type     StateType       is ( IDLE, ARB, WAIT_SPI, DONE );
