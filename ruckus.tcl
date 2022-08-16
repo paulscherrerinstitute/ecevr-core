@@ -7,6 +7,7 @@ foreach f {
   AxilSpiMaster.vhd
   Bus2DRP.vhd
   Bus2I2cStreamIF.vhd
+  Bus2SpiFlash.vhd
   EcEvrBoardMap.vhd
   EcEvrBspPkg.vhd
   EcEvrWrapper.vhd
