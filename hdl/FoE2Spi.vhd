@@ -586,30 +586,30 @@ begin
                v := UDP;
             end if;
          when FOE =>
-            spiGrantFoE <= spiClaimFoE;
             if ( spiClaimFoE = '0' ) then
                v := IDLE;
             end if;
          when UDP =>
-            spiGrantBus <= spiClaimBus;
             if ( spiClaimBus = '0' ) then
                v := IDLE;
             end if;
       end case;
 
       if    ( v = FOE ) then
-         wrVld    <= wrVldFoE;
-         wrRdyFoe <= wrRdy;
-         csb      <= csbFoE;
-         rdVldFoE <= rdVld;
-         rdRdy    <= rdRdyFoE;
+         spiGrantFoE <= spiClaimFoE;
+         wrVld       <= wrVldFoE;
+         wrRdyFoe    <= wrRdy;
+         csb         <= csbFoE;
+         rdVldFoE    <= rdVld;
+         rdRdy       <= rdRdyFoE;
       elsif ( v = UDP ) then
-         wrDat    <= wrDatBus;
-         wrVld    <= wrVldBus;
-         wrRdyBus <= wrRdy;
-         csb      <= csbBus;
-         rdVldBus <= rdVld;
-         rdRdy    <= rdRdyBus;
+         spiGrantBus <= spiClaimBus;
+         wrDat       <= wrDatBus;
+         wrVld       <= wrVldBus;
+         wrRdyBus    <= wrRdy;
+         csb         <= csbBus;
+         rdVldBus    <= rdVld;
+         rdRdy       <= rdRdyBus;
       end if;
       
       spiMuxStateIn <= v;
