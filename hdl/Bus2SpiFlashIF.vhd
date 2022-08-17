@@ -46,7 +46,7 @@ architecture Impl of Bus2SpiFlashIF is
 
    constant CS_ACTIVE_C     :  std_logic := '0';
    constant CS_NOT_ACTIVE_C :  std_logic := not CS_ACTIVE_C;
-   constant SPICMD_READ_C   :  std_logic_vector(7 downto 0) := x"9f";
+   constant SPICMD_READ_C   :  std_logic_vector(7 downto 0) := x"03";
    constant SPICMD_ONES_C   :  std_logic_vector(7 downto 0) := x"ff";
 
    subtype  CountType       is natural range 0 to 3;
