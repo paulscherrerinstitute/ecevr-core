@@ -70,15 +70,18 @@ begin
       wait until rising_edge( clk );
     end loop;
     report "IDCODE: x" & toString(dou);
+    assert dou = x"03651093" report "IDCODE mismatch" severity failure;
     adr <= x"0010";
     wait until rising_edge( clk );
     while ( ( req and ack ) = '0' ) loop
       wait until rising_edge( clk );
     end loop;
     report "WBSTAR: x" & toString(dou);
+    assert dou = x"deadbeef" report "WBSTAR mismatch" severity failure;
     req <= '0';
     wait until rising_edge( clk );
 
+    report "Test PASSED -- ";
     don <= true;
     wait;
   end process P_DRV;
