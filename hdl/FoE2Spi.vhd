@@ -263,6 +263,7 @@ architecture Impl of FoE2Spi is
    signal spiRst          : std_logic;
 
    signal foeSubLoc       : FoeSubType;
+   signal busRepLoc       : Udp2BusRepType := UDP2BUSREP_INIT_C;
 
 begin
 
@@ -298,14 +299,14 @@ begin
    debug(31 downto 24)       <= wrDat;
    debug(32)                 <= busReq.valid;
    debug(33)                 <= busReq.rdnwr;
-   debug(34)                 <= busRep.valid;
-   debug(35)                 <= busRep.berr;
+   debug(34)                 <= busRepLoc.valid;
+   debug(35)                 <= busRepLoc.berr;
    debug(36)                 <= spiClaimBus;
    debug(37)                 <= spiGrantBus
    debug(38)                 <= spiClaimFoE;
    debug(39)                 <= spiGrantFoE;
-   debug(40)                 <= spiMuxState;
-   debug(63 downto 41)       <= (others => '0');
+   debug(41 downto 40)       <= std_logic_vector( to_unsigned( SpiMuxStatType'pos( spiMuxState ), 2 ) );
+   debug(63 downto 42)       <= (others => '0');
 
    P_COMB : process ( r, wrRdyFoE, rdVldFoE, rdDat, foeMst, spiGrantFoE ) is
       variable v : RegType;
@@ -515,7 +516,7 @@ begin
          rst     => spiRst,
 
          busReq  => busReq,
-         busRep  => busRep,
+         busRep  => busRepLoc,
 
          spiReq  => spiClaimBus,
          spiGnt  => spiGrantBus,
@@ -618,6 +619,7 @@ begin
 
    foeSub      <= foeSubLoc;
    spiRst      <= rst;
+   busRep      <= busRepLoc;
 
    progress(3) <= r.writing;
    progress(2) <= r.erasing;
