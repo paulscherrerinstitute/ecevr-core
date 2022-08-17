@@ -302,10 +302,10 @@ begin
    debug(34)                 <= busRepLoc.valid;
    debug(35)                 <= busRepLoc.berr;
    debug(36)                 <= spiClaimBus;
-   debug(37)                 <= spiGrantBus
+   debug(37)                 <= spiGrantBus;
    debug(38)                 <= spiClaimFoE;
    debug(39)                 <= spiGrantFoE;
-   debug(41 downto 40)       <= std_logic_vector( to_unsigned( SpiMuxStatType'pos( spiMuxState ), 2 ) );
+   debug(41 downto 40)       <= toSlv( SpiMuxStateType'pos( spiMuxState ), 2 );
    debug(63 downto 42)       <= (others => '0');
 
    P_COMB : process ( r, wrRdyFoE, rdVldFoE, rdDat, foeMst, spiGrantFoE ) is
