@@ -296,7 +296,16 @@ begin
    debug(15)                 <= rdRdy;
    debug(23 downto 16)       <= rdDat;
    debug(31 downto 24)       <= wrDat;
-   debug(63 downto 32)       <= (others => '0');
+   debug(32)                 <= busReq.valid;
+   debug(33)                 <= busReq.rdnwr;
+   debug(34)                 <= busRep.valid;
+   debug(35)                 <= busRep.berr;
+   debug(36)                 <= spiClaimBus;
+   debug(37)                 <= spiGrantBus
+   debug(38)                 <= spiClaimFoE;
+   debug(39)                 <= spiGrantFoE;
+   debug(40)                 <= spiMuxState;
+   debug(63 downto 41)       <= (others => '0');
 
    P_COMB : process ( r, wrRdyFoE, rdVldFoE, rdDat, foeMst, spiGrantFoE ) is
       variable v : RegType;
