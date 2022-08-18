@@ -10,6 +10,7 @@ LANSRCS+=Lan9254Pkg.vhd
 LANSRCS+=Lan9254ESCPkg.vhd
 LANSRCS+=IPAddrConfigPkg.vhd
 LANSRCS+=IlaWrappersPkg.vhd
+LANSRCS+=ESCMbxPkg.vhd
 LANSRCS+=ESCFoEPkg.vhd
 LANSRCS+=MicroUDPPkg.vhd
 LANSRCS+=Udp2BusPkg.vhd

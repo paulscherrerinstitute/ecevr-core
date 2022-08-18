@@ -27,6 +27,19 @@ package FoE2SpiPkg is
 
    function toFoEFileNameMap(constant a : FlashFileArray) return FoEFileNameArray;
 
+   subtype Foe2SpiErrorType  is std_logic_vector(3 downto 0);
+
+   constant FOE2SPI_ERR_NONE_C              : Foe2SpiErrorType := "0000";
+   -- attempt to write beyond configured file size
+   constant FOE2SPI_ERR_NOSPACE_C           : Foe2SpiErrorType := "0001";
+   -- internal error (csel deasserted during clock transition)
+   constant FOE2SPI_ERR_INTERNAL_C          : Foe2SpiErrorType := "0010";
+   -- erase failure (readback detected non-blank data)
+   constant FOE2SPI_ERR_NOT_BLANK_C         : Foe2SpiErrorType := "0011";
+   -- readback/verification failure
+   constant FOE2SPI_ERR_VERIFY_C            : Foe2SpiErrorType := "0100";
+
+
 end package FoE2SpiPkg;
 
 package body FoE2SpiPkg is

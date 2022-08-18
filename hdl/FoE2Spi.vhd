@@ -9,6 +9,7 @@ use work.Lan9254Pkg.all;
 use work.ESCFoEPkg.all;
 use work.FoE2SpiPkg.all;
 use work.Udp2BusPkg.all;
+use work.ESCMbxPkg.all;
 
 entity FoE2Spi is
    generic (
@@ -417,7 +418,7 @@ begin
             v.lastSeen := false;
             v.overrun  := false;
             v.progDone := false;
-            if ( foeMst.err = '1' ) then
+            if ( foeMst.abort = '1' ) then
                v.state := DONE;
             elsif ( foeMst.strmMst.valid = '1' ) then
                v.spiClaim := '1';
@@ -470,7 +471,7 @@ begin
                   if ( r.minBusyPoll > r.busyPoll ) then
                      v.minBusyPoll := r.busyPoll;
                   end if;
-                  if    ( foeMst.err = '1' ) then
+                  if    ( foeMst.abort = '1' ) then
                      schedDeactCS( v );
                      v.retState    := DONE;
                   elsif ( sameBlk( r.addr, r.laddr ) ) then
@@ -536,7 +537,7 @@ begin
          -- assume CSB is asserted already
          when WRITE_PAGE =>
             if ( r.rdRdy = '0' ) then
-               if ( foeMst.err = '1' ) then
+               if ( foeMst.abort = '1' ) then
                   schedDeactCS( v );
                   v.retState := DONE;
                else
@@ -580,9 +581,9 @@ begin
             else
                v.progDone := false;
                if ( r.rdDat(SPI_ST0_BUSY_IDX_C) = '0' ) then
-                  if ( r.overrun or ( foeMst.err = '1' ) ) then
+                  if ( r.overrun or ( foeMst.abort = '1' ) ) then
                      if ( r.overrun ) then
-                        v.foeSub.abort := '1';
+                        v.foeSub.err := FOE_ERR_CODE_DISKFULL_C;
                      end if;
                      schedDeactCS( v );
                      v.retState    := DONE;
@@ -626,7 +627,7 @@ begin
                      v.crcErr   := '1';
                      schedDeactCS( v );
                      v.retState    := DONE;
-                  elsif ( r.lastSeen or ( foeMst.err = '1' ) ) then
+                  elsif ( r.lastSeen or ( foeMst.abort = '1' ) ) then
                      schedDeactCS( v );
                      v.retState    := DONE;
                   else
@@ -644,15 +645,18 @@ begin
             v.eraseBlink := (others => '0');
             v.writeBlink := (others => '0');
             if ( (r.cselErr or r.blnkErr or r.crcErr) = '1' ) then
-               v.foeSub.abort := '1';
-               v.cselErr      := '0';
-               v.blnkErr      := '0';
-               v.crcErr       := '0';
+               if    ( r.cselErr = '1' ) then
+                  v.foeSub.err := FOE_ERR_CODE_VENDOR_C; -- should really not happen!
+               elsif ( r.blnkErr = '1' ) then
+                  v.foeSub.err := FOE_ERR_CODE_PROGRAM_ERROR_C; -- should really not happen!
+               elsif ( r.blnkErr = '1' ) then
+                  v.foeSub.err := FOE_ERR_CODE_CHECKSUM_ERROR_C; -- should really not happen!
+               end if;
             elsif ( (not r.foeSub.done and not foeMst.fifoRst) = '1' ) then
                v.foeSub.done  := '1';
             elsif ( (r.foeSub.done and foeMst.doneAck) = '1' ) then
                v.foeSub.done  := '0';
-               v.foeSub.abort := '0';
+               v.foeSub.err   := FOE_NO_ERROR_C;
                v.state        := IDLE;
             end if;
       end case;
