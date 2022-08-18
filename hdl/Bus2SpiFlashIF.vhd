@@ -14,26 +14,26 @@ entity Bus2SpiFlashIF is
       LD_PAGE_SIZE_G : natural range 2 to 20 := 16 -- byte address
    );
    port (
-      clk     : in  std_logic;
-      rst     : in  std_logic;
+      clk      : in  std_logic;
+      rst      : in  std_logic;
 
-      busReq  : in  Udp2BusReqType;
-      busRep  : out Udp2BusRepType;
+      busReq   : in  Udp2BusReqType;
+      busRep   : out Udp2BusRepType;
 
       -- request/grant of SPI interface
-      spiReq  : out std_logic;
-      spiGnt  : in  std_logic := '1';
+      spiClaim : out std_logic;
+      spiGrant : in  std_logic := '1';
 
       -- spi controller request (output of this module)
-      spiVldI : out std_logic;
-      spiDatI : out std_logic_vector(7 downto 0);
-      spiCsel : out std_logic;
-      spiRdyI : in  std_logic;
+      spiVldI  : out std_logic;
+      spiDatI  : out std_logic_vector(7 downto 0);
+      spiCsel  : out std_logic;
+      spiRdyI  : in  std_logic;
 
       -- spi controller reply (input of this module)
-      spiVldO : in  std_logic;
-      spiDatO : in  std_logic_vector(7 downto 0);
-      spiRdyO : out std_logic
+      spiVldO  : in  std_logic;
+      spiDatO  : in  std_logic_vector(7 downto 0);
+      spiRdyO  : out std_logic
    );
 end entity Bus2SpiFlashIF;
 
@@ -59,7 +59,7 @@ architecture Impl of Bus2SpiFlashIF is
       addr      :  unsigned(8*SPI_ABYTES_C - 1 downto 0);
       busRep    :  Udp2BusRepType;
       skip      :  natural range 0 to 5;
-      spiReq    :  std_logic;
+      spiClaim  :  std_logic;
       spiVldI   :  std_logic;
       spiDatI   :  std_logic_vector(7 downto 0);
       spiRdyO   :  std_logic;
@@ -73,7 +73,7 @@ architecture Impl of Bus2SpiFlashIF is
       addr      => (others => '0'),
       busRep    => UDP2BUSREP_INIT_C,
       skip      =>  0,
-      spiReq    => '0',
+      spiClaim  => '0',
       spiVldI   => '0',
       spiDatI   => (others => '0'),
       spiRdyO   => '0'
@@ -114,7 +114,7 @@ architecture Impl of Bus2SpiFlashIF is
 
 begin
 
-   P_COMB : process ( r, busReq, spiGnt, spiRdyI, spiVldO, spiDatO ) is
+   P_COMB : process ( r, busReq, spiGrant, spiRdyI, spiVldO, spiDatO ) is
       variable v : RegType;
    begin
       v   := r;
@@ -134,7 +134,7 @@ begin
                   v.state  := DONE;
                else
                   if ( busReq.rdnwr = '1' ) then
-                     v.spiReq       := '1';
+                     v.spiClaim     := '1';
                      v.state        := ARB;
                      -- validity of byte-enable lanes is checked in ARB state
                      setPageAddr( v.addr, busReq );
@@ -149,10 +149,10 @@ begin
 
          when ARB =>
             v.skip := 4 - accessWidth( busReq );
-            if ( ( spiGnt = '0' ) or ( v.skip > 3 ) ) then
+            if ( ( spiGrant = '0' ) or ( v.skip > 3 ) ) then
                -- access to SPI bus not granted, invalid byte-lanes
                -- or no data requested
-               v.spiReq       := '0'; -- revoke bus request
+               v.spiClaim     := '0'; -- revoke bus request
                v.busRep.valid := '1';
                v.busRep.berr  := '1';
                if ( v.skip = 4 ) then
@@ -228,7 +228,7 @@ begin
                   when CSHI =>
                      -- done;
                      v.spiVldI      := '0'; -- revoke spiVldI
-                     v.spiReq       := '0'; -- relinquish SPI interface
+                     v.spiClaim     := '0'; -- relinquish SPI interface
                      v.busRep.valid := '1'; -- signal that reply is ready
                      v.state        := DONE;
                end case;   
@@ -252,17 +252,17 @@ begin
       end if;
    end process P_SEQ;
 
-   busRep  <= r.busRep;
+   busRep   <= r.busRep;
 
    -- spi controller arbitration
-   spiReq  <= r.spiReq;
+   spiClaim <= r.spiClaim;
 
    -- spi controller request (output of this module)
-   spiVldI <= r.spiVldI;
-   spiDatI <= r.spiDatI;
-   spiCsel <= r.spiCsel;
+   spiVldI  <= r.spiVldI;
+   spiDatI  <= r.spiDatI;
+   spiCsel  <= r.spiCsel;
 
    -- spi controller reply (input of this module)
-   spiRdyO <= r.spiRdyO;
+   spiRdyO  <= r.spiRdyO;
 
 end architecture Impl;

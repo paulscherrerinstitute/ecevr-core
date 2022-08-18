@@ -682,46 +682,46 @@ begin
          LD_PAGE_SIZE_G => LD_BUS_PAGE_SIZE_G
       )
       port map (
-         clk     => clk,
-         rst     => spiRst,
+         clk       => clk,
+         rst       => spiRst,
 
-         busReq  => busReq,
-         busRep  => busRepLoc,
+         busReq    => busReq,
+         busRep    => busRepLoc,
 
-         spiReq  => spiClaimBus,
-         spiGnt  => spiGrantBus,
+         spiClaim  => spiClaimBus,
+         spiGrant  => spiGrantBus,
 
-         spiVldI => wrVldBus,
-         spiDatI => wrDatBus,
-         spiCsel => csbBus,
-         spiRdyI => wrRdyBus,
+         spiVldI   => wrVldBus,
+         spiDatI   => wrDatBus,
+         spiCsel   => csbBus,
+         spiRdyI   => wrRdyBus,
 
-         spiDatO => rdDat,
-         spiVldO => rdVldBus,
-         spiRdyO => rdRdyBus
+         spiDatO   => rdDat,
+         spiVldO   => rdVldBus,
+         spiRdyO   => rdRdyBus
       );
 
    U_SPI : entity work.SpiBitShifter
       generic map (
-         DIV2_G => DIV2_C
+         DIV2_G    => DIV2_C
       )
       port map (
-         clk     => clk,
-         rst     => spiRst,
+         clk       => clk,
+         rst       => spiRst,
 
-         datInp  => wrDat,
-         csbInp  => csb,
-         vldInp  => wrVld,
-         rdyInp  => wrRdy,
+         datInp    => wrDat,
+         csbInp    => csb,
+         vldInp    => wrVld,
+         rdyInp    => wrRdy,
 
-         datOut  => rdDat,
-         vldOut  => rdVld,
-         rdyOut  => rdRdy,
+         datOut    => rdDat,
+         vldOut    => rdVld,
+         rdyOut    => rdRdy,
 
-         serClk  => sclkLoc,
-         serInp  => miso,
-         serOut  => mosiLoc,
-         serCsb  => scsbLoc
+         serClk    => sclkLoc,
+         serInp    => miso,
+         serOut    => mosiLoc,
+         serCsb    => scsbLoc
       );
 
    P_SPI_MUX : process (

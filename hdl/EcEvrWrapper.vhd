@@ -108,11 +108,24 @@ architecture Impl of EcEvrWrapper is
 
   constant EVR_BASE_ADDR_C          : unsigned(31 downto 0) := x"0000_0000";
 
+  -- local 1st tier subordinates
   constant NUM_LOC_SUBS_C           : natural := 3;
+  -- #0 subordinate: bus 2nd tier mux
+  constant BUS_1IDX_MUX_C           : natural := 0;
+  -- #1 subordinate: SPI2Flash master
+  constant BUS_1IDX_SPI_C           : natural := 1;
+  -- #2 subordinate: I2C master
+  constant BUS_1IDX_I2C_C           : natural := 2;
+
+  -- total numer of 1st tier subordinates
   constant NUM_BUS_SUBS_C           : natural := NUM_LOC_SUBS_C + NUM_BUS_SUBS_G;
-  constant BUS_SIDX_EVR_C           : natural := 0;
-  constant BUS_SIDX_LOC_C           : natural := 1;
-  constant BUS_SIDX_I2C_C           : natural := 2;
+
+  -- number of 2nd-tier subordinates
+  constant NUM_SUB_SUBS_C           : natural := 2;
+
+  -- 2nd-tier subordinates
+  constant BUS_2IDX_EVR_C           : natural := 0;
+  constant BUS_2IDX_LOC_C           : natural := 1;
 
   constant NUM_HBI_MSTS_C           : natural := 1;
   constant PRI_HBI_MSTS_C           : integer := -1;
@@ -122,7 +135,7 @@ architecture Impl of EcEvrWrapper is
 
   constant MAX_TXPDO_SEGMENTS_C     : natural := 16;
 
-  constant NUM_I2C_MST_C            : natural :=  2;
+  constant NUM_I2C_MST_C            : natural :=  3;
   constant I2C_MST_CFG_C            : natural :=  0;
   constant I2C_MST_PRG_C            : natural :=  1;
   constant I2C_MST_BUS_C            : natural :=  2;
@@ -141,23 +154,27 @@ architecture Impl of EcEvrWrapper is
   signal configDebug    : std_logic_vector(31 downto 0);
   signal configInit     : std_logic;
 
-
   signal escHbiReq      : Lan9254ReqType := LAN9254REQ_INIT_C;
   signal escHbiRep      : Lan9254RepType := LAN9254REP_INIT_C;
 
   signal hbiReq         : Lan9254ReqType;
   signal hbiRep         : Lan9254RepType;
 
+  signal bus1SubReq     : Udp2BusReqArray(NUM_BUS_SUBS_C - 1 downto 0) := (others => UDP2BUSREQ_INIT_C);
+  signal bus1SubRep     : Udp2BusRepArray(NUM_BUS_SUBS_C - 1 downto 0) := (others => UDP2BUSREP_INIT_C);
+  signal bus1SubReq     : Udp2BusReqArray(NUM_BUS_SUBS_C - 1 downto 0) := (others => UDP2BUSREQ_INIT_C);
+  signal bus1SubRep     : Udp2BusRepArray(NUM_BUS_SUBS_C - 1 downto 0) := (others => UDP2BUSREP_INIT_C);
 
-  signal busSubReq      : Udp2BusReqArray(NUM_BUS_SUBS_C - 1 downto 0) := (others => UDP2BUSREQ_INIT_C);
-  signal busSubRep      : Udp2BusRepArray(NUM_BUS_SUBS_C - 1 downto 0) := (others => UDP2BUSREP_INIT_C);
+  signal bus2SubReq     : Udp2BusReqArray(NUM_SUB_SUBS_C - 1 downto 0) := (others => UDP2BUSREQ_INIT_C);
+  signal bus2SubRep     : Udp2BusRepArray(NUM_SUB_SUBS_C - 1 downto 0) := (others => UDP2BUSREP_INIT_C);
+  signal bus2SubReq     : Udp2BusReqArray(NUM_SUB_SUBS_C - 1 downto 0) := (others => UDP2BUSREQ_INIT_C);
+  signal bus2SubRep     : Udp2BusRepArray(NUM_SUB_SUBS_C - 1 downto 0) := (others => UDP2BUSREP_INIT_C);
 
   signal busMstReq      : Udp2BusReqArray(NUM_BUS_MSTS_C - 1 downto 0) := (others => UDP2BUSREQ_INIT_C);
   signal busMstRep      : Udp2BusRepArray(NUM_BUS_MSTS_C - 1 downto 0) := (others => UDP2BUSREP_INIT_C);
 
   signal hbiMstReq      : Lan9254ReqArray(HBI_MSTS_LDX_C downto HBI_MSTS_RDX_C) := (others => LAN9254REQ_INIT_C);
   signal hbiMstRep      : Lan9254RepArray(HBI_MSTS_LDX_C downto HBI_MSTS_RDX_C) := (others => LAN9254REP_INIT_C);
-
 
   signal usr_evts_adj   : std_logic_vector(3 downto 0);
   signal latchedEvents  : std_logic_vector(1 downto 0);
@@ -211,8 +228,8 @@ architecture Impl of EcEvrWrapper is
 
 begin
 
-  busSubRep(NUM_BUS_SUBS_C - 1 downto NUM_LOC_SUBS_C) <= busReps;
-  busReqs                                             <= busSubReq(NUM_BUS_SUBS_C - 1 downto NUM_LOC_SUBS_C);
+  bus1SubRep(NUM_BUS_SUBS_C - 1 downto NUM_LOC_SUBS_C) <= busReps;
+  busReqs                                              <= bus1SubReq(NUM_BUS_SUBS_C - 1 downto NUM_LOC_SUBS_C);
 
   P_HBI_MUX : process (
     extHbiSel, extHbiReq, escHbiReq, hbiRep
@@ -243,6 +260,23 @@ begin
 
       hbiOut       => lan9254_hbiOb,
       hbiInp       => lan9254_hbiIb
+    );
+
+  U_BUS2_MUX : entity work.Udp2BusMux
+    generic map (
+      ADDR_MSB_G     => 16,
+      ADDR_LSB_G     => 15,
+      NUM_SUBS_G     => NUM_SUB_SUBS_C
+    )
+    port map (
+      clk          => sysClk,
+      rst          => hbiRst,
+
+      reqIb        => bus1SubReq(BUS_1IDX_MUX_C),
+      repIb        => bus1SubRep(BUS_1IDX_MUX_C),
+
+      reqOb        => bus2SubReq,
+      repOb        => bus2SubRep
     );
 
   U_ESC : entity work.Lan9254ESCWrapper
@@ -287,8 +321,8 @@ begin
       busMstReq       => busMstReq,
       busMstRep       => busMstRep,
 
-      busSubReq       => busSubReq,
-      busSubRep       => busSubRep,
+      busSubReq       => bus1SubReq,
+      busSubRep       => bus1SubRep,
 
       txPDOMst        => open,
       txPDORdy        => open,
@@ -318,8 +352,8 @@ begin
       bus_CLK           => sysClk,
       bus_RESET         => sysRst,
 
-      bus_Req           => busSubReq(BUS_SIDX_EVR_C),
-      bus_Rep           => busSubRep(BUS_SIDX_EVR_C),
+      bus_Req           => bus2SubReq(BUS_2IDX_EVR_C),
+      bus_Rep           => bus2SubRep(BUS_2IDX_EVR_C),
 
       evr_CfgReq        => configReq.evr320,
       evr_CfgAck        => configAck.evr320,
@@ -472,20 +506,20 @@ begin
     end if;
   end process P_PRG_START;
 
---  U_BUS_I2C : entity work.Bus2I2cStreamIF
---    port map (
---      clk                => sysClk,
---      rst                => sysRst,
---
---      busReq             => busSubReq(BUS_SIDX_I2C_C),
---      busRep             => busSubRep(BUS_SIDX_I2C_C),
---
---      strmMstOb          => i2cStrmReqMst(I2C_MST_BUS_C),
---      strmRdyOb          => i2cStrmReqRdy(I2C_MST_BUS_C),
---      strmMstIb          => i2cStrmRepMst(I2C_MST_BUS_C),
---      strmRdyIb          => i2cStrmRepRdy(I2C_MST_BUS_C),
---      strmLock           => i2cStrmLock  (I2C_MST_BUS_C)
---    );
+  U_BUS_I2C : entity work.Bus2I2cStreamIF
+    port map (
+      clk                => sysClk,
+      rst                => sysRst,
+
+      busReq             => bus1SubReq(BUS_1IDX_I2C_C),
+      busRep             => bus1SubRep(BUS_1IDX_I2C_C),
+
+      strmMstOb          => i2cStrmReqMst(I2C_MST_BUS_C),
+      strmRdyOb          => i2cStrmReqRdy(I2C_MST_BUS_C),
+      strmMstIb          => i2cStrmRepMst(I2C_MST_BUS_C),
+      strmRdyIb          => i2cStrmRepRdy(I2C_MST_BUS_C),
+      strmLock           => i2cStrmLock  (I2C_MST_BUS_C)
+    );
 
   U_I2C_MST : entity work.I2cWrapper
     generic map (
@@ -534,8 +568,8 @@ begin
         foeMst              => foeMst,
         foeSub              => foeSubLoc,
 
-        busReq              => busSubReq(BUS_SIDX_I2C_C),
-        busRep              => busSubRep(BUS_SIDX_I2C_C),
+        busReq              => bus1SubReq(BUS_1IDX_SPI_C),
+        busRep              => bus1SubRep(BUS_1IDX_SPI_C),
 
         sclk                => spiMstLoc.sclk,
         mosi                => spiMstLoc.mosi,
@@ -567,7 +601,6 @@ begin
     begin
       foeSub                         <= foeSubLoc;
       foeSub.file0WP                 <= file0WP;
-
       spiMstLoc.util                 <= (others => '0');
       spiMstLoc.util(progress'range) <= progress;
     end process P_MISC;
@@ -598,6 +631,10 @@ begin
         );
     end generate GEN_ILA;
   end generate G_FOE_SPI;
+
+  G_NO_FOE_SPI : if ( not GEN_FOE_C ) generate
+    bus1SubRep(BUS_1IDX_SPI_C) <= UDP2BUSREP_INIT_C;
+  end generate G_NO_FOE_SPI;
 
   G_EEP_ILA : if ( GEN_EEP_ILA_G ) generate
     signal clkdiv : unsigned(5 downto 0) := (others => '0');
@@ -651,17 +688,17 @@ begin
     end if;
   end process P_CFG_SEQ;
 
-  P_DIAG : process ( busSubReq(BUS_SIDX_LOC_C), dbufSegments, configReq,
+  P_DIAG : process ( bus2SubReq(BUS_2IDX_LOC_C), dbufSegments, configReq,
                      configRetries, configRstR, configDebug, txPdoTrgCount ) is
     variable a : unsigned( 7 downto 0 );
     variable v : std_logic_vector(31 downto 0);
     variable q : Udp2BusReqType;
   begin
-    q := busSubReq(BUS_SIDX_LOC_C);
+    q := bus2SubReq(BUS_2IDX_LOC_C);
     a := unsigned(q.dwaddr(7 downto 0));
     v := (others => '0');
-    busSubRep(BUS_SIDX_LOC_C)       <= UDP2BUSREP_INIT_C;
-    busSubRep(BUS_SIDX_LOC_C).valid <= '1';
+    bus2SubRep(BUS_2IDX_LOC_C)       <= UDP2BUSREP_INIT_C;
+    bus2SubRep(BUS_2IDX_LOC_C).valid <= '1';
     configRstRIn                    <= configRstR;
     case ( to_integer( a ) ) is
       when 0 => v(0) := configReq.net.macAddrVld;
@@ -693,7 +730,7 @@ begin
                         & std_logic_vector( dbufSegments(to_integer(a) - 8).off );
       when others =>
     end case;
-    busSubRep(BUS_SIDX_LOC_C).rdata <= v;
+    bus2SubRep(BUS_2IDX_LOC_C).rdata <= v;
   end process P_DIAG;
 
   i2c_scl_o     <= scl_o_loc;
