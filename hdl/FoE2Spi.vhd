@@ -170,6 +170,8 @@ architecture Impl of FoE2Spi is
       cselErr     : std_logic;
       blnkErr     : std_logic;
       crcErr      : std_logic;
+      busyPoll    : natural range 0 to 15;
+      minBusyPoll : natural range 0 to 15;
    end record RegType;
 
    constant REG_INIT_C : RegType := (
@@ -200,7 +202,9 @@ architecture Impl of FoE2Spi is
       sclkLst     => '0',
       cselErr     => '0',
       blnkErr     => '0',
-      crcErr      => '0'
+      crcErr      => '0',
+      busyPoll    => 0,
+      minBusyPoll => 15
    );
 
    type SpiMuxStateType is ( IDLE, FOE, UDP );
@@ -348,7 +352,8 @@ begin
    debug(41 downto 40)       <= toSlv( SpiMuxStateType'pos( spiMuxState ), 2 );
    debug(51 downto 42)       <= std_logic_vector( r.addr(9 downto 0) );
    debug(55 downto 52)       <= std_logic_vector( resize( to_signed( r.idx, 5 ), 4 ) );
-   debug(63 downto 56)       <= (others => '0');
+   debug(59 downto 56)       <= toSlv( natural'pos( r.minBusyPoll ), 4 );
+   debug(63 downto 60)       <= (others => '0');
 
    P_COMB : process ( r, wrRdyFoE, rdVldFoE, rdDat, foeMst, spiGrantFoE, sclkLoc, mosiLoc, miso, scsbLoc ) is
       variable v : RegType;
@@ -421,6 +426,7 @@ begin
                -- wait for the SPI master to become available
                if ( ( r.spiClaim and spiGrantFoE ) = '1' ) then
                   v.state    := START_ERASE;
+                  v.minBusyPoll := 15;
                end if;
             end if;
 
@@ -449,14 +455,21 @@ begin
             else
                v.progDone := false;
                v.state    := ERASE;
+               v.busyPoll := 0;
             end if;
 
          when ERASE =>
             if ( not r.progDone ) then
                schedStatusPoll( v );
+               if ( r.busyPoll < 15 ) then
+                  v.busyPoll := r.busyPoll + 1;
+               end if;
             else
                v.progDone := false;
                if ( r.rdDat(SPI_ST0_BUSY_IDX_C) = '0' ) then
+                  if ( r.minBusyPoll > r.busyPoll ) then
+                     v.minBusyPoll := r.busyPoll;
+                  end if;
                   if    ( foeMst.err = '1' ) then
                      schedDeactCS( v );
                      v.retState    := DONE;
@@ -552,6 +565,11 @@ begin
                       v.cnt   := r.cnt - 1;
                       -- keep copying
                       v.state := r.state;
+                   else
+                      -- to be consistent with the r.addr = l.addr case
+                      -- we go to WAIT_PAGEWR state with the last address
+                      -- written.
+                      v.addr := r.addr;
                    end if;
                end if;
             end if;
@@ -579,8 +597,8 @@ begin
             if ( not r.progDone ) then
                -- 'cnt' holds left-over count if this was an incomplete last transaction;
                v.cnt      := PAGE_SIZE_C - 1 - r.cnt;
-               -- reset address
-               v.addr     := r.addr - ( v.cnt + 1 );
+               -- reset address; r.addr was the last address written
+               v.addr     := r.addr - v.cnt;
                schedRead( v );
             else
                v.progDone := false;
