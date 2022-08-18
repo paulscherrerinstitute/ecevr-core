@@ -162,11 +162,7 @@ architecture Impl of EcEvrWrapper is
 
   signal bus1SubReq     : Udp2BusReqArray(NUM_BUS_SUBS_C - 1 downto 0) := (others => UDP2BUSREQ_INIT_C);
   signal bus1SubRep     : Udp2BusRepArray(NUM_BUS_SUBS_C - 1 downto 0) := (others => UDP2BUSREP_INIT_C);
-  signal bus1SubReq     : Udp2BusReqArray(NUM_BUS_SUBS_C - 1 downto 0) := (others => UDP2BUSREQ_INIT_C);
-  signal bus1SubRep     : Udp2BusRepArray(NUM_BUS_SUBS_C - 1 downto 0) := (others => UDP2BUSREP_INIT_C);
 
-  signal bus2SubReq     : Udp2BusReqArray(NUM_SUB_SUBS_C - 1 downto 0) := (others => UDP2BUSREQ_INIT_C);
-  signal bus2SubRep     : Udp2BusRepArray(NUM_SUB_SUBS_C - 1 downto 0) := (others => UDP2BUSREP_INIT_C);
   signal bus2SubReq     : Udp2BusReqArray(NUM_SUB_SUBS_C - 1 downto 0) := (others => UDP2BUSREQ_INIT_C);
   signal bus2SubRep     : Udp2BusRepArray(NUM_SUB_SUBS_C - 1 downto 0) := (others => UDP2BUSREP_INIT_C);
 
@@ -272,8 +268,8 @@ begin
       clk          => sysClk,
       rst          => hbiRst,
 
-      reqIb        => bus1SubReq(BUS_1IDX_MUX_C),
-      repIb        => bus1SubRep(BUS_1IDX_MUX_C),
+      reqIb        => bus1SubReq(BUS_1IDX_MUX_C downto BUS_1IDX_MUX_C),
+      repIb        => bus1SubRep(BUS_1IDX_MUX_C downto BUS_1IDX_MUX_C),
 
       reqOb        => bus2SubReq,
       repOb        => bus2SubRep
