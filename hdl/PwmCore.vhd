@@ -79,7 +79,7 @@ begin
       end if;
    end process P_PWM;
 
-   P_OUT : process ( count ) is
+   P_OUT : process ( count, pw ) is
    begin
       if ( count < to_integer( unsigned( pw ) ) ) then
          pwmOut <= '1';
