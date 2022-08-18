@@ -137,6 +137,7 @@ architecture Impl of FoE2Spi is
       START_ERASE, ERASE,
       START_VERIFY_BLANK, VERIFY_BLANK,
       START_WRITE_PAGE, WRITE_PAGE, WAIT_PAGEWR,
+      START_VERIFY_PAGE, VERIFY_PAGE,
       DONE);
 
    type RegType is record
@@ -168,6 +169,7 @@ architecture Impl of FoE2Spi is
       sclkLst     : std_logic;
       cselErr     : std_logic;
       blnkErr     : std_logic;
+      crcErr      : std_logic;
    end record RegType;
 
    constant REG_INIT_C : RegType := (
@@ -197,7 +199,8 @@ architecture Impl of FoE2Spi is
       misoLst     => '0',
       sclkLst     => '0',
       cselErr     => '0',
-      blnkErr     => '0'
+      blnkErr     => '0',
+      crcErr      => '0'
    );
 
    type SpiMuxStateType is ( IDLE, FOE, UDP );
@@ -322,7 +325,7 @@ begin
    debug(3 downto 0)         <= toSlv( StateType'pos( r.state ), 4 );
    debug(4)                  <= r.cselErr;
    debug(5)                  <= r.blnkErr;
-   debug(6)                  <= '0';
+   debug(6)                  <= r.crcErr;
    debug(7)                  <= r.foeSub.done;
    debug(8)                  <= foeMst.doneAck;
    debug(9)                  <= foeSubLoc.strmRdy;
@@ -559,16 +562,60 @@ begin
             else
                v.progDone := false;
                if ( r.rdDat(SPI_ST0_BUSY_IDX_C) = '0' ) then
-                  if ( r.lastSeen or ( foeMst.err = '1' ) ) then
+                  if ( r.overrun or ( foeMst.err = '1' ) ) then
                      if ( r.overrun ) then
                         v.foeSub.abort := '1';
                      end if;
                      schedDeactCS( v );
                      v.retState    := DONE;
                   else
-                     v.state       := START_VERIFY_BLANK;
+                     v.state       := START_VERIFY_PAGE;
                      v.writeBlink  := r.writeBlink + 1;
                   end if;
+               end if;
+            end if;
+
+         when START_VERIFY_PAGE =>
+            if ( not r.progDone ) then
+               -- 'cnt' holds left-over count if this was an incomplete last transaction;
+               v.cnt      := PAGE_SIZE_C - 1 - r.cnt;
+               -- reset address
+               v.addr     := r.addr - ( v.cnt + 1 );
+               schedRead( v );
+            else
+               v.progDone := false;
+               v.state    := VERIFY_PAGE;
+               v.idx      := PRG_IDX_CMD_C;
+               v.cmd      := SPICMD_ONES_C;
+               -- start CRC computation
+               v.crcR     := (others => '1');
+            end if;
+
+         when VERIFY_PAGE =>
+            if (  (r.rdRdy or r.wrVld)  = '0' ) then
+               v.wrVld := '1';
+            elsif ( (r.wrVld and wrRdyFoE) = '1' ) then
+               v.wrVld := '0';
+               v.rdRdy := '1';
+            elsif ( (r.rdRdy and rdVldFoE) = '1' ) then
+               v.rdRdy := '0';
+               v.rdDat := rdDat;
+               -- 'cnt' should count correctly even in the
+               -- case of an incomplete last page
+               v.addr  := r.addr + 1;
+               if ( r.cnt = 0 ) then
+                  if ( r.crcR /= r.crcX ) then
+                     v.crcErr   := '1';
+                     schedDeactCS( v );
+                     v.retState    := DONE;
+                  elsif ( r.lastSeen or ( foeMst.err = '1' ) ) then
+                     schedDeactCS( v );
+                     v.retState    := DONE;
+                  else
+                     v.state       := START_VERIFY_BLANK;
+                  end if;
+               else
+                  v.cnt := r.cnt - 1;
                end if;
             end if;
 
@@ -578,10 +625,11 @@ begin
             v.spiClaim   := '0';
             v.eraseBlink := (others => '0');
             v.writeBlink := (others => '0');
-            if ( (r.cselErr or r.blnkErr) = '1' ) then
+            if ( (r.cselErr or r.blnkErr or r.crcErr) = '1' ) then
                v.foeSub.abort := '1';
                v.cselErr      := '0';
                v.blnkErr      := '0';
+               v.crcErr       := '0';
             elsif ( (not r.foeSub.done and not foeMst.fifoRst) = '1' ) then
                v.foeSub.done  := '1';
             elsif ( (r.foeSub.done and foeMst.doneAck) = '1' ) then
