@@ -515,6 +515,10 @@ begin
     );
 
   G_FOE_SPI : if ( GEN_FOE_C ) generate
+    signal spiMonStatus : std_logic_vector(7 downto 0);
+    signal spiMonState  : std_logic_vector(3 downto 0);
+    signal spiMonRst    : std_logic;
+  begin
     U_FOE2SPI : entity work.FoE2Spi
       generic map (
         FILE_MAP_G          => SPI_FILE_MAP_G,
@@ -543,6 +547,22 @@ begin
         debug               => spiDebug
       );
 
+    spiMonRst <= sysRst;
+
+    U_MON : entity work.SpiMonitor
+      port map (
+        clk                 => sysClk,
+        rst                 => spiMonRst,
+
+        spiSclk             => spiMstLoc.sclk,
+        spiMosi             => spiMstLoc.mosi,
+        spiCsel             => spiMstLoc.csel,
+        spiMiso             => spiSub.miso,
+
+        state               => spiMonState,
+        status              => spiMonStatus
+      );
+
     P_MISC : process ( file0WP, foeSubLoc, progress ) is
     begin
       foeSub                         <= foeSubLoc;
@@ -556,13 +576,18 @@ begin
     GEN_ILA : if ( GEN_FOE_ILA_G ) generate
       signal probe2 : std_logic_vector(63 downto 0);
     begin
-      probe2(0)           <= spiMstLoc.sclk;
-      probe2(1)           <= spiMstLoc.csel;
-      probe2(2)           <= spiMstLoc.mosi;
-      probe2(3)           <= spiSub.miso;
-      probe2(4)           <= spiMstLoc.util(0);
-      probe2(5)           <= spiMstLoc.util(1);
-      probe2(63 downto 6) <= (others => '0');
+
+      probe2(0)            <= spiMstLoc.sclk;
+      probe2(1)            <= spiMstLoc.csel;
+      probe2(2)            <= spiMstLoc.mosi;
+      probe2(3)            <= spiSub.miso;
+      probe2(4)            <= spiMstLoc.util(0);
+      probe2(5)            <= spiMstLoc.util(1);
+      probe2(7  downto  6) <= (others => '0');
+      probe2(11 downto  8) <= spiMonState;
+      probe2(19 downto 12) <= spiMonStatus;
+      probe2(63 downto 20) <= (others => '0');
+
       U_ILA : Ila_256
         port map (
           clk         => sysClk,

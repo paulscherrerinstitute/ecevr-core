@@ -33,16 +33,22 @@ SRCS+=EEPROMConfigurator.vhd
 SRCS+=I2cEEPROM.vhd
 SRCS+=EEPROMConfiguratorTb.vhd
 SRCS+=SpiBitShifter.vhd
+SRCS+=SpiMonitor.vhd
 SRCS+=SpiBitShifterTb.vhd
+SRCS+=Bus2SpiFlashIF.vhd
 SRCS+=FoE2Spi.vhd
 SRCS+=FoE2SpiTb.vhd
 SRCS+=IcapE2Reg.vhd
 SRCS+=IcapE2RegTb.vhd
+SRCS+=SpiMonitorTb.vhd
 
 eepromconfiguratortb: ana
 	$(GHDL) -e $@
 
 spibitshiftertb: ana
+	$(GHDL) -e $@
+
+spimonitortb: ana
 	$(GHDL) -e $@
 
 foe2spitb: ana
