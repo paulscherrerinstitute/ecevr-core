@@ -22,7 +22,9 @@ entity Bus2DRP is
       drpWe   : out std_logic;
       drpDin  : out std_logic_vector(15 downto 0);
       drpRdy  : in  std_logic := '0';
-      drpDou  : in  std_logic_vector(15 downto 0) := (others => '0')
+      drpDou  : in  std_logic_vector(15 downto 0) := (others => '0');
+      -- somone else is using it
+      drpBsy  : in  std_logic := '0'
    );
 end entity Bus2DRP;
 
@@ -36,6 +38,7 @@ architecture Impl of Bus2DRP is
       drpWe       : std_logic;
       rep         : Udp2BusRepType;
       timo        : natural range 0 to BUS_TIMO_G - 1;
+      bsy         : std_logic;
    end record RegType;
 
    constant REG_INIT_C : RegType := (
@@ -44,12 +47,13 @@ architecture Impl of Bus2DRP is
       drpEn       => '0',
       drpWe       => '0',
       rep         => UDP2BUSREP_INIT_C,
-      timo        => 0
+      timo        => 0,
+      bsy         => '0'
    );
 
    signal r         : RegType := REG_INIT_C;
    signal rin       : RegType;
- 
+
    signal drpAddr_i : std_logic_vector(15 downto 0);
    signal drpWe_i   : std_logic;
    signal drpEn_i   : std_logic;
@@ -57,7 +61,7 @@ architecture Impl of Bus2DRP is
 
 begin
 
-   P_COMB : process ( r, req, drpDou, drpRdy ) is
+   P_COMB : process ( r, req, drpDou, drpRdy, drpBsy ) is
       variable v : RegType;
    begin
       v   := r;
@@ -78,8 +82,24 @@ begin
 
       case ( r.state ) is
          when IDLE =>
-            if ( req.valid = '1' ) then
-               if    ( (req.be = "0011") or (req.be = "1100") ) then 
+            if ( r.bsy = '1' ) then
+               if ( drpBsy = '0' ) then
+                  -- retry the access
+                  -- note that we could be starved if
+                  -- busy is reasserted again; assume
+                  -- some external arbitration...
+                  v.bsy   := '0';
+               elsif ( r.timo = 0 ) then
+                  v.bsy   := '0';
+                  -- timeout
+                  v.rep   :=  UDP2BUSREP_ERROR_C;
+                  v.state :=  DONE;
+               end if;
+            elsif ( req.valid = '1' ) then
+               if    ( drpBsy = '1' ) then
+                  v.bsy    := '1';
+                  v.timo   := BUS_TIMO_G - 1;
+               elsif ( (req.be = "0011") or (req.be = "1100") ) then
                   v.drpEn  := '1';
                   v.drpWe  := not req.rdnwr;
                   v.state  := WAI;
