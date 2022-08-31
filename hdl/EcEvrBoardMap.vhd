@@ -138,6 +138,27 @@ begin
       datOut(0)  => lan9254RstbOut
     );
 
+  -- SYNC - NOTE: SYNC must be enabled for this mapping
+  --              to be active (reg. 0x151)
+
+  -- SYNC0 synchronization
+
+  U_SYNC_SYNC0 : entity work.SynchronizerBit
+    port map (
+      clk        => sysClk,
+      rst        => '0',
+      datInp(0)  => fpga_i(29),
+      datOut(0)  => ec_SYNC(0)
+    );
+
+  U_SYNC_SYNC1 : entity work.SynchronizerBit
+    port map (
+      clk        => sysClk,
+      rst        => '0',
+      datInp(0)  => fpga_i(11),
+      datOut(0)  => ec_SYNC(1)
+    );
+
   -- inbound mappings
   P_LAN_2_FPGA : process ( imageSel, fpga_i, irq_i ) is
   begin
@@ -156,10 +177,6 @@ begin
       lan9254_irq <= irq_i;
     end if;
 
-    -- SYNC - NOTE: SYNC must be enabled for this mapping
-    --              to be active (reg. 0x151)
-    ec_SYNC(1)            <= fpga_i(11);
-    ec_SYNC(0)            <= fpga_i(29);
     case ( imageSel ) is
 
       when HBI16M =>
