@@ -88,7 +88,7 @@ entity EcEvrWrapper is
     spiMst            : out    BspSpiMstType := BSP_SPI_MST_INIT_C;
     spiSub            : in     BspSpiSubType := BSP_SPI_SUB_INIT_C;
 
-    file0WP           : in     std_logic     := '0';
+    fileWP            : in     std_logic     := '0';
 
     timingMGTStatus   : in     std_logic_vector(31 downto 0) := (others => '0');
 
@@ -282,7 +282,7 @@ begin
       NUM_BUS_MSTS_G        => NUM_BUS_MSTS_C,
       NUM_EXT_HBI_MASTERS_G => NUM_HBI_MSTS_C,
       EXT_HBI_MASTERS_PRI_G => PRI_HBI_MSTS_C,
-      FOE_FILE_MAP_G        => toFoEFileNameMap( SPI_FILE_MAP_G ),
+      FOE_FILE_MAP_G        => toFoEFileMap( SPI_FILE_MAP_G ),
       -- our EvrTxPDO talks to the HBI directly
       DISABLE_TXPDO_G       => true,
       GEN_ESC_ILA_G         => GEN_ESC_ILA_G,
@@ -593,10 +593,10 @@ begin
         status              => spiMonStatus
       );
 
-    P_MISC : process ( file0WP, foeSubLoc, progress ) is
+    P_MISC : process ( fileWP, foeSubLoc, progress ) is
     begin
       foeSub                         <= foeSubLoc;
-      foeSub.file0WP                 <= file0WP;
+      foeSub.fileWP                  <= fileWP;
       spiMstLoc.util                 <= (others => '0');
       spiMstLoc.util(progress'range) <= progress;
     end process P_MISC;

@@ -102,7 +102,8 @@ begin
          0 => (
             id       => x"00",
             begAddr  => x"000000",
-            endAddr  => x"01ffff"
+            endAddr  => x"01ffff",
+            flags    => FLASH_FILE_FLAGS_NONE_C
               )
       ),
       CLOCK_FREQ_G   => 20.0E6

@@ -14,6 +14,7 @@ package FoE2SpiPkg is
       begAddr   : A24Type;
       -- last address; endAddr + 1 must be aligned to erase block size
       endAddr   : A24Type;
+      flags     : std_logic_vector(0 downto 0);
    end record FlashFileType;
 
    type FlashFileArray is array (natural range <>) of FlashFileType;
@@ -21,11 +22,17 @@ package FoE2SpiPkg is
    constant FLASH_FILE_ARRAY_EMPTY_C : FlashFileArray(0 downto 1) := (
       others => ( id      => (others => '0'),
                   begAddr => (others => '0'),
-                  endAddr => (others => '0')
+                  endAddr => (others => '0'),
+                  flags   => (others => '0')
                 )
    );
 
-   function toFoEFileNameMap(constant a : FlashFileArray) return FoEFileNameArray;
+   constant FLASH_FILE_FLAG_WP_C    : std_logic_vector(0 downto 0) := "1";
+   constant FLASH_FILE_FLAGS_NONE_C : std_logic_vector(0 downto 0) := (others => '0');
+
+   function toFoEFileMap(constant a : in FlashFileArray) return FoEFileArray;
+
+   function isFoEFileWriteProtected(constant x : in FlashFileType) return boolean;
 
    subtype Foe2SpiErrorType  is std_logic_vector(3 downto 0);
 
@@ -44,15 +51,23 @@ end package FoE2SpiPkg;
 
 package body FoE2SpiPkg is
 
-   function toFoEFileNameMap(
-      constant a : FlashFileArray
-   ) return FoEFileNameArray is
-      variable v : FoEFileNameArray(a'range);
+   function toFoEFileMap(
+      constant a : in FlashFileArray
+   ) return FoEFileArray is
+      variable v : FoEFileArray(a'range);
    begin
       for i in a'range loop
-         v(i) := a(i).id;
+         v(i).id := a(i).id;
+         v(i).wp := isFoEFileWriteProtected( a(i) );
       end loop;
       return v;
-   end function toFoEFileNameMap;
+   end function toFoEFileMap;
+
+   function isFoEFileWriteProtected(constant x : in FlashFileType)
+   return boolean is
+      constant z : std_logic_vector(x.flags'range) := (others => '0');
+   begin
+      return ( (x.flags and FLASH_FILE_FLAG_WP_C) =  z );
+   end function isFoEFileWriteProtected;
 
 end package body FoE2SpiPkg;
