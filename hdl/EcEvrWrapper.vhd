@@ -90,6 +90,9 @@ entity EcEvrWrapper is
 
     fileWP            : in     std_logic     := '0';
 
+    -- synchronized into sysClk
+    evrStable         : out    std_logic;
+
     timingMGTStatus   : in     std_logic_vector(31 downto 0) := (others => '0');
 
     timingRecClk      : in     std_logic;
@@ -223,6 +226,8 @@ architecture Impl of EcEvrWrapper is
   signal foeDebug     : std_logic_vector(63 downto 0);
 
   signal progress     : std_logic_vector( 3 downto 0);
+
+  signal evrStableLoc : std_logic;
 
 begin
 
@@ -359,6 +364,8 @@ begin
       clk_evr           => timingRecClk,
       rst_evr           => timingRecRst,
 
+      evr_stable_o      => evrStableLoc,
+
       usr_events_adj_o  => usr_evts_adj,
       extra_events_o    => extra_events,
 
@@ -370,6 +377,14 @@ begin
       evr_rx_data       => timingRxData,
       evr_rx_charisk    => timingDataK,
       mgt_status_i      => timingMGTStatus
+    );
+
+  U_SYNC_EVR_STABLE : entity work.SynchronizerBit
+    port map (
+      clk               => sysClk,
+      rst               => '0',
+      datInp(0)         => evrStableLoc,
+      datOut(0)         => evrStable
     );
 
   P_LATCH : process ( timingRecClk ) is

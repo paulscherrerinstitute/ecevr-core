@@ -59,9 +59,11 @@ entity evr320_udp2bus_wrapper is
     timestamp_hi_o   : out std_logic_vector(31 downto 0);
     timestamp_lo_o   : out std_logic_vector(31 downto 0);
     timestamp_strb_o : out std_logic;
+
     ---------------------------------------------------------------------------
     -- User interface MGT clock
     ---------------------------------------------------------------------------
+    evr_stable_o     : out std_logic;
     usr_events_o     : out std_logic_vector(3 downto 0); -- User defined event pulses with one clock cycles length & no delay 
     sos_event_o      : out std_logic;   -- Start-of-Sequence Event
     --*** new features adjusted in delay & length ***
@@ -178,6 +180,8 @@ begin
   misc_status(15 downto 7) <= (others => '0');
 
   misc_status( 3 downto 0) <= decoder_status(3 downto 0);
+
+  evr_stable_o             <= decoder_status(3);
 
   timestampLoMode_xuser    <= usr_control(0);
 
