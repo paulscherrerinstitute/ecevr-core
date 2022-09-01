@@ -130,19 +130,26 @@ begin
          when DESYNC =>
             v.csb := '0';
             case ( r.cnt ) is
-               when 0 =>
+               when 0 | 1 => -- during read-cycle, cnt=0: r.csb is still '1'
                   v.iOut := x"20000000"; -- no-op
-               when 1 =>
-                  v.iOut := x"30008001"; -- word to CMD
                when 2 =>
-                  v.iOut := x"0000000D"; -- desync
+                  v.iOut := x"30008001"; -- word to CMD
                when 3 =>
+                  v.iOut := x"0000000D"; -- desync
+               when 4 | 5 =>
                   v.iOut := x"20000000"; -- no-op
-               when 4 =>
+               when 6 =>
                   v.csb   := '1';
                   v.ack   := '1';
-               when others =>
+               when 7 =>
                   -- ack reset in this state, see above
+                  -- somehow, the real/hard ICAPE2 does not like
+                  -- back-to-back access; simulation worked but
+                  -- for the hard device I had to introduce this
+                  -- one wait cycle (7)
+                  v.csb   := '1';
+               when others =>
+                  v.csb   := '1';
                   v.state := IDLE;
             end case;
 
