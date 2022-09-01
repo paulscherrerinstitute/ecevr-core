@@ -113,7 +113,7 @@ begin
             v.prsc := DIV2_G - 1;
             if ( r.clkCnt(0) = '1' ) then
               -- negative edge, shift out
-              v.sreg := r.sreg( r.sreg'left - 1 downto 0 ) & '0';
+              v.sreg(r.sreg'left downto 1) := r.sreg( r.sreg'left - 1 downto 0 );
             else
               -- positive edge, register serial input
               v.sreg(0) := serInp;
