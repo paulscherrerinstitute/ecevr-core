@@ -106,7 +106,9 @@ architecture Impl of EcEvrWrapper is
   constant NUM_BUS_MSTS_C           : natural := 1;
   constant BUS_MIDX_PDO_C           : natural := 0;
 
+  constant MEM_OFFSET_C             : unsigned(31 downto 0) := x"0000_0080";
   constant EVR_BASE_ADDR_C          : unsigned(31 downto 0) := x"0000_0000";
+  constant MEM_BASE_ADDR_C          : unsigned(31 downto 0) := EVR_BASE_ADDR_C + MEM_OFFSET_C;
 
   -- local 1st tier subordinates
   constant NUM_LOC_SUBS_C           : natural := 3;
@@ -401,7 +403,7 @@ begin
     generic map (
       NUM_EVENT_DWORDS_G => 8,
       EVENT_MAP_G        => EVENT_MAP_IDENT_C,
-      MEM_BASE_ADDR_G    => EVR_BASE_ADDR_C,
+      MEM_BASE_ADDR_G    => MEM_BASE_ADDR_C,
       MAX_MEM_XFERS_G    => MAX_TXPDO_SEGMENTS_C,
       TXPDO_ADDR_G       => unsigned(ESC_SM3_SMA_C)
     )
