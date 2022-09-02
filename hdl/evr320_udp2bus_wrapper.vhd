@@ -64,7 +64,8 @@ entity evr320_udp2bus_wrapper is
     -- User interface MGT clock
     ---------------------------------------------------------------------------
     evr_stable_o     : out std_logic;
-    usr_events_o     : out std_logic_vector(3 downto 0); -- User defined event pulses with one clock cycles length & no delay 
+    usr_events_o     : out std_logic_vector(3 downto 0); -- User defined event pulses with one clock cycles length & no delay
+    usr_events_en_o  : out std_logic_vector(3 downto 0);
     sos_event_o      : out std_logic;   -- Start-of-Sequence Event
     --*** new features adjusted in delay & length ***
     --usr_event_width_i : in  typ_arr_width; --output extend in clock recovery clock cycles event 0,1,2,3
@@ -74,6 +75,7 @@ entity evr320_udp2bus_wrapper is
     -- additional events to decode; unfortunatelye the register map of the evr320 and the
     -- associated data types are not easily extendable; therefore we provide an additional bank
     extra_events_o   : out std_logic_vector(g_EXTRA_RAW_EVTS - 1 downto 0);
+    extra_events_en_o: out std_logic_vector(g_EXTRA_RAW_EVTS - 1 downto 0);
     --------------------------------------------------------------------------
     -- Decoder axi stream interface, User clock
     --------------------------------------------------------------------------
@@ -493,6 +495,11 @@ begin
   -- Extra events
   -- --------------------------------------------------------------------------
   gene_extra_decoders : for dec in g_EXTRA_RAW_EVTS - 1 downto 0 generate
+    function toSl(constant x : in boolean) return std_logic is
+    begin
+      if ( x ) then return '1'; else return '0'; end if;
+    end function toSl;
+  begin
     prc_xtra_dec : process(clk_evr) is
     begin
       if ( rising_edge( clk_evr ) ) then
@@ -506,8 +513,10 @@ begin
          end if;
       end if;
     end process prc_xtra_dec;
+
+    extra_events_en_o(dec) <= toSl( unsigned(extra_events(dec)) /= 0 );
   end generate gene_extra_decoders;
- 
+
   -- --------------------------------------------------------------------------
   -- port mapping
   -- --------------------------------------------------------------------------
@@ -519,6 +528,8 @@ begin
   timestamp_lo_o   <= timestampLo;
   timestamp_hi_o   <= timestampHi;
   timestamp_strb_o <= timestampStrobe;
+
+  usr_events_en_o  <= evr_params.event_enable;
 
 end rtl;
 -- ----------------------------------------------------------------------------

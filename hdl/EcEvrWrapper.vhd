@@ -152,7 +152,8 @@ architecture Impl of EcEvrWrapper is
   signal eepWriteReq    : EEPROMWriteWordReqType;
   signal eepWriteAck    : EEPROMWriteWordAckType;
   signal dbufSegments   : MemXferArray(MAX_TXPDO_SEGMENTS_C - 1 downto 0);
-  signal configRetries  : unsigned(3 downto 0);
+  signal dbufLastAddr   : unsigned(15 downto 0);
+  signal configRetries  : unsigned( 3 downto 0);
   signal configRstR     : std_logic := '0';
   signal configRstRIn   : std_logic;
   signal configRst      : std_logic;
@@ -177,9 +178,12 @@ architecture Impl of EcEvrWrapper is
   signal hbiMstReq      : Lan9254ReqArray(HBI_MSTS_LDX_C downto HBI_MSTS_RDX_C) := (others => LAN9254REQ_INIT_C);
   signal hbiMstRep      : Lan9254RepArray(HBI_MSTS_LDX_C downto HBI_MSTS_RDX_C) := (others => LAN9254REP_INIT_C);
 
-  signal usr_evts_adj   : std_logic_vector(3 downto 0);
+  signal usr_events_adj : std_logic_vector(3 downto 0);
+  signal usr_events_en  : std_logic_vector(3 downto 0);
+  signal latch          : std_logic_vector(3 downto 0);
   signal latchedEvents  : std_logic_vector(1 downto 0);
   signal extra_events   : std_logic_vector(NUM_EXTRA_EVENTS_C - 1 downto 0);
+  signal extra_events_en: std_logic_vector(NUM_EXTRA_EVENTS_C - 1 downto 0);
   signal evrTimestampHi : std_logic_vector(31 downto 0) := (others => '0');
   signal evrTimestampLo : std_logic_vector(31 downto 0) := (others => '0');
 
@@ -200,34 +204,41 @@ architecture Impl of EcEvrWrapper is
   --  3.  go on using the stream/i2c master + bus; nobody else
   --      can do so.
   --  4.  clear lock bit.
-  signal i2cStrmLock    : std_logic_vector(NUM_I2C_MST_C - 1 downto 0);
+  signal i2cStrmLock     : std_logic_vector(NUM_I2C_MST_C - 1 downto 0);
 
   signal i2cStrmReqMst, i2cStrmRepMst : Lan9254StrmMstArray(NUM_I2C_MST_C - 1 downto 0);
   signal i2cStrmReqRdy, i2cStrmRepRdy : std_logic_vector   (NUM_I2C_MST_C - 1 downto 0);
 
   signal sda_o_loc, scl_o_loc, sda_t_loc, scl_t_loc : std_logic_vector(NUM_I2C_C - 1 downto 0);
 
-  signal i2cProgRun   : std_logic     := '1';
-  signal i2cProgValid : std_logic;
-  signal i2cProgRdy   : std_logic;
-  signal i2cProgFound : std_logic;
-  signal i2cProgAddr  : unsigned(15 downto 0);
-  signal i2cProgDone  : std_logic;
-  signal i2cProgAck   : std_logic     := '1';
-  signal i2cProgErr   : std_logic;
+  signal i2cProgRun      : std_logic     := '1';
+  signal i2cProgValid    : std_logic;
+  signal i2cProgRdy      : std_logic;
+  signal i2cProgFound    : std_logic;
+  signal i2cProgAddr     : unsigned(15 downto 0);
+  signal i2cProgDone     : std_logic;
+  signal i2cProgAck      : std_logic     := '1';
+  signal i2cProgErr      : std_logic;
 
-  signal foeMst       : FoEMstType    := FOE_MST_INIT_C;
-  signal foeSub       : FoESubType    := FOE_SUB_ASSERT_C;
-  signal foeSubLoc    : FoESubType    := FOE_SUB_ASSERT_C;
+  signal foeMst          : FoEMstType    := FOE_MST_INIT_C;
+  signal foeSub          : FoESubType    := FOE_SUB_ASSERT_C;
+  signal foeSubLoc       : FoESubType    := FOE_SUB_ASSERT_C;
 
-  signal spiMstLoc    : BspSpiMstType := BSP_SPI_MST_INIT_C;
+  signal spiMstLoc       : BspSpiMstType := BSP_SPI_MST_INIT_C;
 
-  signal spiDebug     : std_logic_vector(63 downto 0);
-  signal foeDebug     : std_logic_vector(63 downto 0);
+  signal spiDebug        : std_logic_vector(63 downto 0);
+  signal foeDebug        : std_logic_vector(63 downto 0);
 
-  signal progress     : std_logic_vector( 3 downto 0);
+  signal progress        : std_logic_vector( 3 downto 0);
 
-  signal evrStableLoc : std_logic;
+  signal evrStableLoc    : std_logic;
+
+  signal pdoTrg          : std_logic;
+  signal dbufReceived    : std_logic;
+
+  signal dbusStreamAddr  : std_logic_vector(10 downto 0);
+  signal dbusStreamData  : std_logic_vector( 7 downto 0);
+  signal dbusStreamValid : std_logic;
 
 begin
 
@@ -366,13 +377,19 @@ begin
 
       evr_stable_o      => evrStableLoc,
 
-      usr_events_adj_o  => usr_evts_adj,
+      usr_events_adj_o  => usr_events_adj,
+      usr_events_en_o   => usr_events_en,
       extra_events_o    => extra_events,
+      extra_events_en_o => extra_events_en,
 
       event_o           => eventCode,
       event_vld_o       => eventCodeVld,
       timestamp_hi_o    => evrTimestampHi,
       timestamp_lo_o    => evrTimestampLo,
+
+      stream_valid_o    => dbusStreamValid,
+      stream_addr_o     => dbusStreamAddr,
+      stream_data_o     => dbusStreamData,
 
       evr_rx_data       => timingRxData,
       evr_rx_charisk    => timingDataK,
@@ -387,22 +404,31 @@ begin
       datOut(0)         => evrStable
     );
 
+  P_LATCH_IN : process ( extra_events, extra_events_en, dbufReceived ) is
+  begin
+    for i in extra_events'range loop
+      if ( extra_events_en(i) = '1' ) then
+        latch(i) <= extra_events(i);
+      else
+        latch(i) <= dbufReceived;
+      end if;
+    end loop;
+  end process P_LATCH_IN;
+
   P_LATCH : process ( timingRecClk ) is
   begin
     if ( rising_edge( timingRecClk ) ) then
       if ( timingRecRst = '1' ) then
         latchedEvents <= (others => '0');
       else
-        if ( extra_events(0) = '1' ) then
+        if ( ( not latchedEvents(0) and latch(0) ) = '1' ) then
           latchedEvents(0) <= '1';
-        end if;
-        if ( extra_events(1) = '1' ) then
+        elsif ( latch(1) = '1' ) then
           latchedEvents(0) <= '0';
         end if;
-        if ( extra_events(2) = '1' ) then
+        if ( ( not latchedEvents(1) and latch(2) ) = '1' ) then
           latchedEvents(1) <= '1';
-        end if;
-        if ( extra_events(3) = '1' ) then
+        elsif ( latch(3) = '1' ) then
           latchedEvents(1) <= '0';
         end if;
       end if;
@@ -412,7 +438,7 @@ begin
   ec_latch_o(0) <= latchedEvents(0);
   ec_latch_o(1) <= latchedEvents(1);
 
-  evrEventsAdj  <= usr_evts_adj;
+  evrEventsAdj  <= usr_events_adj;
 
   U_TXPDO : entity work.EvrTxPDO
     generic map (
@@ -426,7 +452,7 @@ begin
       evrClk             => timingRecClk,
       evrRst             => timingRecRst,
 
-      pdoTrg             => usr_evts_adj(0),
+      pdoTrg             => pdoTrg,
       tsHi               => evrTimestampHi,
       tsLo               => evrTimestampLo,
       eventCode          => eventCode,
@@ -462,6 +488,7 @@ begin
       eepWriteReq        => eepWriteReq,
       eepWriteAck        => eepWriteAck,
       dbufMaps           => dbufSegments,
+      dbufLastAddr       => dbufLastAddr,
       emulActive         => eepEmulActLoc,
 
       i2cAddr2BMode      => i2cAddr2BMode,
@@ -745,6 +772,24 @@ begin
     end case;
     bus2SubRep(BUS_2IDX_LOC_C).rdata <= v;
   end process P_DIAG;
+
+  P_DBUF_RECEIVED : process ( dbusStreamValid, dbusStreamAddr, dbufLastAddr ) is
+  begin
+    dbufReceived <= '0';
+    if ( ( dbusStreamValid = '1' ) and ( unsigned(dbusStreamAddr) = dbufLastAddr ) ) then
+      dbufReceived <= '1';
+    end if;
+  end process P_DBUF_RECEIVED;
+
+  P_PDO_TRIG : process ( usr_events_adj, usr_events_en, dbufReceived ) is
+    constant PDO_TRIG_EVENT_C : natural := 0;
+  begin
+    if ( usr_events_en(PDO_TRIG_EVENT_C) = '1' ) then
+      pdoTrg <= usr_events_adj(PDO_TRIG_EVENT_C);
+    else
+      pdoTrg <= dbufReceived;
+    end if;
+  end process P_PDO_TRIG;
 
   i2c_scl_o     <= scl_o_loc;
   i2c_scl_t     <= scl_t_loc;

@@ -48,6 +48,9 @@ entity EEPROMConfigurator is
       configReq          : out EEPROMConfigReqType;
       configAck          : in  EEPROMConfigAckType;
       dbufMaps           : out MemXferArray(MAX_TXPDO_MAPS_G - 1 downto 0);
+      -- highest address in DBUF we are interested in
+      -- (can be used to trigger sending PDO)
+      dbufLastAddr       : out unsigned(15 downto 0);
 
       i2cAddr2BMode      : in  std_logic := toSl( EEPROM_SIZE_G >= 32768 );
                                                  -- assert if eeprom used 2 address bytes
@@ -129,7 +132,7 @@ architecture rtl of EEPROMConfigurator is
       return noStop & std_logic_vector(count) & a & op;
    end function i2cHeader;
 
-   type StateType is (INIT, START, REMU, ADDR, ADDR_RESP, READ, RCV, STORE_UPPER, DRAIN, CHECK, DONE, I2C_WRA, I2C_WRD);
+   type StateType is (INIT, START, REMU, ADDR, ADDR_RESP, READ, RCV, STORE_UPPER, DRAIN, CHECK, LAST_ADDR, DONE, I2C_WRA, I2C_WRD);
 
    type RegType is record
       state     : StateType;
@@ -169,6 +172,7 @@ architecture rtl of EEPROMConfigurator is
       catsFound : natural range 0 to MAX_CATS_C;
       eepWrAck  : EEPROMWriteWordAckType;
       i2cLock   : std_logic;
+      lastAddr  : unsigned(15 downto 0); -- highest address in data-buffer we are using
    end record RegType;
 
    function TX_MST_INIT_F return Lan9254StrmMstType is
@@ -202,21 +206,22 @@ architecture rtl of EEPROMConfigurator is
       cfgEnd    => PROM_LEN_C  - 1,
       allOnes   => '0',
       allZeros  => '0',
-      cnt       => (others => '0'),
+      cnt       => ( others => '0' ),
       cfgImg    => ( others => (others => '1') ), -- emulate blank eeprom
       mapImg    => ( others => (others => '1') ),
       maps      => ( others => MEM_XFER_INIT_C ),
-      tmp       => (others => '0'),
+      tmp       => ( others => '0' ),
       nMaps     => 0,
       lnMaps    => 0,
-      catDone   => (EEPROM_OFFSET_G /= 0),
+      catDone   => ( EEPROM_OFFSET_G /= 0 ),
       cfgFound  => false,
       i2cPrgFnd => "00",
-      i2cPrgAdr => ( others => '0'),
-      retries   => (others => '0'),
+      i2cPrgAdr => ( others => '0' ),
+      retries   => ( others => '0' ),
       catsFound => 0,
       eepWrAck  => EEPROM_WRITE_WORD_ACK_INIT_C,
-      i2cLock   => '0'
+      i2cLock   => '0',
+      lastAddr  => ( others => '0' )
    );
 
    procedure storeByte(
@@ -452,6 +457,7 @@ begin
             v.i2cLock  := '0';
             v.allZeros := r.allZeros and toSl( r.cfgImg( to_integer( r.cnt ) ) = x"00" );
             v.allOnes  := r.allOnes  and toSl( r.cfgImg( to_integer( r.cnt ) ) = x"FF" );
+            v.cnt      := r.cnt + 1;
             if    ( r.cnt = 5 + NET_CFG_OFF_C ) then
                v.macVld   := not v.allOnes and not v.allZeros and versionMatch( r );
                v.allOnes  := '1';
@@ -464,7 +470,13 @@ begin
                v.udpVld   := not v.allOnes and not v.allZeros and versionMatch( r );
                v.allOnes  := '1';
             elsif ( r.cnt = CFG_LEN_C - 1 ) then
-               v.state         := DONE;
+               if ( r.nMaps = 0 ) then
+                  v.state := DONE;
+               else
+                  v.lnMaps := r.nMaps;
+                  v.state  := LAST_ADDR;
+                  v.nMaps  := r.nMaps - 1;
+               end if;
                -- let the ESC start
                v.smCfg.valid   := '1';
                if ( r.cfgFound ) then
@@ -473,7 +485,20 @@ begin
                v.i2cPrgFnd(1)  := (r.i2cPrgFnd(0) and versionMatch( r ));
                v.txPdoVld      := '1';
             end if;
-            v.cnt := r.cnt + 1;
+
+         when LAST_ADDR =>
+            -- compute highest address in the EVR data-buffer we are going to address
+            -- use the 'nMaps' counter to address 'maps' since we have used that elsewhere
+            -- - hopefully that keeps the logic simpler...
+            if ( (r.maps(r.nMaps).num + r.maps(r.nMaps).off - 1) > r.lastAddr ) then
+               v.lastAddr := r.maps(r.nMaps).off + r.maps(r.nMaps).num - 1;
+            end if;
+            if ( r.nMaps = 0 ) then
+               v.state := DONE;
+               v.nMaps := r.lnMaps; -- restore
+            else
+               v.nMaps := r.nMaps - 1;
+            end if;
 
          when REMU =>
             storeByte( v, r, readEmul( r ) );
@@ -658,12 +683,13 @@ begin
       end if;
    end process P_SEQ;
 
-   dbufMaps    <= r.maps;
-   configReq   <= configReqLoc;
+   dbufMaps           <= r.maps;
+   dbufLastAddr       <= r.lastAddr;
+   configReq          <= configReqLoc;
 
-   retries     <= r.retries;
+   retries            <= r.retries;
 
-   eepWriteAck <= r.eepWrAck;
+   eepWriteAck        <= r.eepWrAck;
 
    debug(31 downto 4) <= (others => '0');
    debug( 3 downto 0) <= std_logic_vector( to_unsigned( StateType'pos( r.state ), 4 ) );
