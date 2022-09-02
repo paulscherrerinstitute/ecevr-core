@@ -100,7 +100,8 @@ entity EcEvrWrapper is
 
     timingRxData      : in     std_logic_vector(15 downto 0);
     timingDataK       : in     std_logic_vector( 1 downto 0);
-    evrEventsAdj      : out    std_logic_vector( 3 downto 0)
+    evrEventsAdj      : out    std_logic_vector( 3 downto 0);
+    pdoTrg            : out    std_logic
   );
 end entity EcEvrWrapper;
 
@@ -233,7 +234,7 @@ architecture Impl of EcEvrWrapper is
 
   signal evrStableLoc    : std_logic;
 
-  signal pdoTrg          : std_logic;
+  signal pdoTrgLoc       : std_logic;
   signal dbufReceived    : std_logic;
 
   signal dbusStreamAddr  : std_logic_vector(10 downto 0);
@@ -452,7 +453,7 @@ begin
       evrClk             => timingRecClk,
       evrRst             => timingRecRst,
 
-      pdoTrg             => pdoTrg,
+      pdoTrg             => pdoTrgLoc,
       tsHi               => evrTimestampHi,
       tsLo               => evrTimestampLo,
       eventCode          => eventCode,
@@ -785,9 +786,9 @@ begin
     constant PDO_TRIG_EVENT_C : natural := 0;
   begin
     if ( usr_events_en(PDO_TRIG_EVENT_C) = '1' ) then
-      pdoTrg <= usr_events_adj(PDO_TRIG_EVENT_C);
+      pdoTrgLoc <= usr_events_adj(PDO_TRIG_EVENT_C);
     else
-      pdoTrg <= dbufReceived;
+      pdoTrgLoc <= dbufReceived;
     end if;
   end process P_PDO_TRIG;
 
@@ -797,6 +798,7 @@ begin
   i2c_sda_t     <= sda_t_loc;
 
   spiMst        <= spiMstLoc;
+  pdoTrg        <= pdoTrgLoc;
 
   eepEmulActive <= eepEmulActLoc;
 
