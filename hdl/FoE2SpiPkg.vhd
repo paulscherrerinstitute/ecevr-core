@@ -67,7 +67,7 @@ package body FoE2SpiPkg is
    return boolean is
       constant z : std_logic_vector(x.flags'range) := (others => '0');
    begin
-      return ( (x.flags and FLASH_FILE_FLAG_WP_C) =  z );
+      return ( (x.flags and FLASH_FILE_FLAG_WP_C) /=  z );
    end function isFoEFileWriteProtected;
 
 end package body FoE2SpiPkg;
