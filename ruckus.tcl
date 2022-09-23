@@ -18,10 +18,17 @@ foreach f {
   evr320_udp2bus_wrapper.vhd
   EvrTxPDOPkg.vhd
   EvrTxPDO.vhd
+  FoE2SpiPkg.vhd
+  FoE2Spi.vhd
   I2cEEPROM.vhd
+  I2cProgrammer.vhd
   I2cWrapper.vhd
+  IcapE2Reg.vhd
   PhaseDetector.vhd
   PsiI2cStreamIF.vhd
+  PwmCore.vhd
+  SpiBitShifter.vhd
+  SpiMonitor.vhd
   ZynqBspPkg.vhd
   ZynqIOBuf.vhd
   ZynqOBufDS.vhd
