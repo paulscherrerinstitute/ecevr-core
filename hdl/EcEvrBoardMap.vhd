@@ -171,7 +171,7 @@ begin
     dioWdTrig     <= '0';
     dioOutValid   <= '0';
     lan9254_hbiIb <= LAN9254HBIINP_INIT_C;
-    lan9254_irq   <= '0';
+    lan9254_irq   <= not EC_IRQ_ACT_C;
 
     if ( imageSel /= DIGIO ) then
       lan9254_irq <= irq_i;
