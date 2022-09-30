@@ -142,6 +142,9 @@ begin
    end process P_SEQ;
 
    GEN_DRP_ILA : if ( GEN_ILA_G ) generate
+      signal dbg_state : std_logic_vector(7 downto 0);
+   begin
+      dbg_state <= std_logic_vector(to_unsigned(StateType'pos(r.state), 8));
       U_ILA : component Ila_256
          port map (
             clk                  => clk,
@@ -158,7 +161,7 @@ begin
             probe2(0)            => req.valid,
             probe2(3  downto  1) => "000",
             probe2(7  downto  4) => req.be,
-            probe2(15 downto  8) => std_logic_vector(to_unsigned(StateType'pos(r.state), 8)),
+            probe2(15 downto  8) => dbg_state,
             probe2(31 downto 16) => req.data(15 downto 0),
             probe2(33 downto 32) => "00",
             probe2(63 downto 34) => req.dwaddr,
