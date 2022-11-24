@@ -88,11 +88,13 @@ architecture Sim of I2cProgrammerTb is
 
    constant tstEmu : EEPROMArray(0 to 33) := (
 
-      4 => x"07C0",
+      4 => x"06C0",
       5 => x"01A0",
       6 => x"0302",
       7 => x"0504",
-      8 => x"0706",
+      8 => x"C006", -- send last byte (07) from a non-word aligned command
+      9 => x"A601",
+     10 => x"FF07",
 
       others => x"FFFF"
    );

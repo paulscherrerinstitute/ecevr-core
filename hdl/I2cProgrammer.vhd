@@ -127,6 +127,19 @@ architecture Impl of I2cProgrammer is
       end if;
    end function mkEepAddr;
 
+   function emulRead(constant a : unsigned(15 downto 0)) return std_logic_vector is
+      variable v : std_logic_vector(15 downto 0);
+      constant i : natural := to_integer( shift_right( a, 1 ) );
+   begin
+      if ( a(0) = '0' ) then
+         v := EEPROM_INIT_G( i );
+      else
+         v( 7 downto 0) := EEPROM_INIT_G( i   )(15 downto 8);
+         v(15 downto 8) := EEPROM_INIT_G( i+1 )( 7 downto 0);
+      end if;
+      return v;
+   end function emulRead;
+
    signal r   : RegType := REG_INIT_C;
    signal rin : RegType;
 
@@ -217,8 +230,12 @@ begin
                            v.err   := '1';
                            v.state := DONE;
                         else
-                           v.cmdBuf(r.wrp)  := EEPROM_INIT_G( to_integer( shift_right( r.cfgAddr, 1 ) ) );
-                           v.cfgAddr        := r.cfgAddr + 2;
+                           v.cmdBuf(r.wrp)  := emulRead( r.cfgAddr );
+                           if ( r.count = 0 ) then
+                              v.cfgAddr        := r.cfgAddr + 1;
+                           else
+                              v.cfgAddr        := r.cfgAddr + 2;
+                           end if;
                            v.wrp            := r.wrp + 1;
                            if ( r.count < 2 ) then
                               v.state := r.retState;

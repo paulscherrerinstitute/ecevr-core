@@ -435,10 +435,15 @@ begin
       );
 
    G_ILA : if ( GEN_ILA_G ) generate
+      attribute KEEP : string;
       signal p0 : std_logic_vector(63 downto 0) := (others => '0');
       signal p1 : std_logic_vector(63 downto 0) := (others => '0');
       signal p2 : std_logic_vector(63 downto 0) := (others => '0');
       signal p3 : std_logic_vector(63 downto 0) := (others => '0');
+      attribute KEEP of p0 : signal is "TRUE";
+      attribute KEEP of p1 : signal is "TRUE";
+      attribute KEEP of p2 : signal is "TRUE";
+      attribute KEEP of p3 : signal is "TRUE";
    begin
 
       p0( 3 downto  0) <= std_logic_vector( to_unsigned( StateType'pos( r.state ), 4 ) );
