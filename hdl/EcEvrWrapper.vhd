@@ -201,7 +201,7 @@ architecture Impl of EcEvrWrapper is
   -- and must clear it's bit when done:
   --  1.  set lock bit
   --  2.  try sending commands/data on the stream. This will only
-  --      proceed one nobody else holds the lock.
+  --      proceed once nobody else holds the lock.
   --  3.  go on using the stream/i2c master + bus; nobody else
   --      can do so.
   --  4.  clear lock bit.
