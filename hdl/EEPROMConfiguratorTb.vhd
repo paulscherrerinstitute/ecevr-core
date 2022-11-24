@@ -1027,8 +1027,9 @@ begin
             wrReq.valid <= '0';
             if ( progFound = '1' ) then
                report "I2C CONFIGURATION PROGRAM FOUND @" & integer'image(to_integer(progAddr));
+               report "TEST PASSED";
             else
-               report "NO I2C CONFIGURATION PROGRAM FOUND";
+               report "NO I2C CONFIGURATION PROGRAM FOUND" severity failure;
             end if;
          end if;
       end if;

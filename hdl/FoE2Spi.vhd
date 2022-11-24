@@ -648,11 +648,12 @@ begin
                if    ( r.cselErr = '1' ) then
                   v.foeSub.err := FOE_ERR_CODE_VENDOR_C; -- should really not happen!
                elsif ( r.blnkErr = '1' ) then
-                  v.foeSub.err := FOE_ERR_CODE_PROGRAM_ERROR_C; -- should really not happen!
-               elsif ( r.blnkErr = '1' ) then
-                  v.foeSub.err := FOE_ERR_CODE_CHECKSUM_ERROR_C; -- should really not happen!
+                  v.foeSub.err := FOE_ERR_CODE_PROGRAM_ERROR_C;
+               elsif ( r.crcErr = '1' ) then
+                  v.foeSub.err := FOE_ERR_CODE_CHECKSUM_ERROR_C;
                end if;
-            elsif ( (not r.foeSub.done and not foeMst.fifoRst) = '1' ) then
+            end if;
+            if ( (not r.foeSub.done and not foeMst.fifoRst) = '1' ) then
                v.foeSub.done  := '1';
             elsif ( (r.foeSub.done and foeMst.doneAck) = '1' ) then
                v.foeSub.done  := '0';

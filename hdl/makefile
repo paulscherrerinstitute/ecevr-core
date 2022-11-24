@@ -2,7 +2,7 @@
 LAN9254_DIR=../../lan9254-rtl-esc/hdl
 EVR320_DIR=../../evr320/hdl
 PSI_COMMON_DIR=../../psi_common/hdl
-UNISIM_DIR=/opt/ghdl/v1.0.0-gcc/vivado-2018.03/
+UNISIM_DIR=/opt/ghdl/v2.0.0-gcc/vivado-2021.2/
 GHDL=ghdl
 
 LANSRCS+=ESCBasicTypesPkg.vhd
@@ -42,29 +42,33 @@ SRCS+=FoE2SpiTb.vhd
 SRCS+=IcapE2Reg.vhd
 SRCS+=IcapE2RegTb.vhd
 SRCS+=SpiMonitorTb.vhd
+SRCS+=EcEvrPulseGen.vhd
+SRCS+=EcEvrPulseGenTb.vhd
 
-eepromconfiguratortb: ana
-	$(GHDL) -e $@
+TSTS=$(filter %Tb,$(patsubst %.vhd,%,$(SRCS)))
 
-spibitshiftertb: ana
-	$(GHDL) -e $@
+IcapE2RegTb_GHDLFLAGS=$(addprefix -P,$(UNISIM_DIR)) -fsynopsys
+IcapE2RegTb_RUNFLAGS =--stop-time=20us
 
-spimonitortb: ana
-	$(GHDL) -e $@
+test: $(addprefix run_,$(TSTS))
 
-foe2spitb: ana
-	$(GHDL) -e $@
+build: $(TSTS)
 
-icape2regtb: ana
-	$(GHDL) -e $(addprefix -P,$(UNISIM_DIR)) -fsynopsys $@
+$(addprefix run_,$(TSTS)):run_%:%
+	echo $@
+	echo $^
+	./$(@:run_%=%) $($(@:run_%=%)_RUNFLAGS)
+
+$(TSTS): ana
+	$(GHDL) -e -g -Wl,-no-pie $($@_GHDLFLAGS) -o $@ $@
 
 ana: $(SRCS)
-	$(GHDL) -a -P$(LAN9254_DIR) $(addprefix -P, $(UNISIM_DIR)) $(SRCS)
+	$(GHDL) -a -g -P$(LAN9254_DIR) $(addprefix -P, $(UNISIM_DIR)) $(SRCS)
 
 EEPROMContentPkg.vhd:
 	$(LAN9254_DIR)/../tool/EsiTool.py -V eeprom_config_tst.xml
 
-.PHONY: ana clean
+.PHONY: ana clean build test $(addprefix run_,$(TSTS))
 
 clean:
-	$(RM) eepromconfiguratortb $(notdir $(SRCS:%.vhd=%.o)) work-obj93.cf e~eepromconfiguratortb.o icape2regtb foe2spitb spibitshiftertb
+	$(RM) $(notdir $(SRCS:%.vhd=%.o)) work-obj93.cf $(TSTS) e~*.o dump.ghw

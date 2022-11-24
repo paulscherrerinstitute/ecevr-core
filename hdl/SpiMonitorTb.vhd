@@ -114,7 +114,7 @@ begin
     send( ep, x"03" );
     send( ep ); -- raise CSEL
 
-    assert errl = "00000" severity failure;
+    assert errl = "00000000" severity failure;
 
     send( ep, x"02" );
     send( ep, x"00" );
@@ -126,7 +126,7 @@ begin
     send( ep ); -- raise CSEL
 
 
-    assert errl = "10000" severity failure;
+    assert errl = "00010000" severity failure;
 
     send( ep, x"02" );
     send( ep, x"00" );
@@ -137,8 +137,9 @@ begin
     send( ep, x"03" );
     send( ep ); -- raise CSEL
 
-    assert errl = "11000" severity failure;
+    assert errl = "00011000" severity failure;
 
+    report "TEST PASSED";
     don <= true;
     wait;
   end process P_DRV;

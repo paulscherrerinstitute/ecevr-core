@@ -6,6 +6,8 @@ use work.ESCBasicTypesPkg.all;
 use work.evr320_pkg.all;
 
 package Evr320ConfigPkg is
+--constant MaxDurationLd_c : natural := 32;
+--constant UsrEventWidthDefault_c : std_logic_vector(MaxDurationLd_c - 1 downto 0) := (2 => '1', 4 => '1', others => '0');
 
    constant NUM_EXTRA_EVENTS_C : natural := 4;
 
@@ -14,13 +16,15 @@ package Evr320ConfigPkg is
       pulseDelay : std_logic_vector(MaxDurationLd_c-1 downto 0);
       pulseEvent : std_logic_vector(                7 downto 0);
       pulseEnbld : std_logic;
+      pulseInvrt : std_logic;
    end record Evr320PulseGenConfigType;
 
    constant EVR320_PULSE_GEN_CONFIG_INIT_C : Evr320PulseGenConfigType := (
       pulseWidth => UsrEventWidthDefault_c,
       pulseDelay => (others => '0'),
       pulseEvent => (others => '0'),
-      pulseEnbld => '0'
+      pulseEnbld => '0',
+      pulseInvrt => '0'
    );
 
    type Evr320PulseGenConfigArray is array (natural range 0 to 3) of Evr320PulseGenConfigType;
@@ -72,8 +76,9 @@ package body Evr320ConfigPkg is
             v(i*SZ_C + 1*4 + j) := x.pulseGenParams(i).pulseDelay(8*j + 7 downto 8*j);
          end loop;
          v(i*SZ_C + 2*4 + 0) := x.pulseGenParams(i).pulseEvent;
-         -- reuse bit 31 of width to for 'enable'
+         -- reuse bit 31/30 of width for 'enable'/'invert'
          v(i*SZ_C + 0*4 + 3)(7) := x.pulseGenParams(i).pulseEnbld;
+         v(i*SZ_C + 0*4 + 3)(6) := x.pulseGenParams(i).pulseInvrt;
       end loop;
       for i in x.pulseGenParams'length*SZ_C to x.pulseGenParams'length*SZ_C + x.extraEvents'length - 1 loop
          v(i) := x.extraEvents(i - x.pulseGenParams'length*SZ_C);
@@ -93,7 +98,9 @@ package body Evr320ConfigPkg is
          end loop;
          v.pulseGenParams(i).pulseEvent     := x(l + i*SZ_C + 2*4 + 0);
          v.pulseGenParams(i).pulseEnbld     := v.pulseGenParams(i).pulseWidth(31);
+         v.pulseGenParams(i).pulseInvrt     := v.pulseGenParams(i).pulseWidth(30);
          v.pulseGenParams(i).pulseWidth(31) := '0';
+         v.pulseGenParams(i).pulseWidth(30) := '0';
       end loop;
       for i in v.pulseGenParams'length*SZ_C to v.pulseGenParams'length*SZ_C + v.extraEvents'length - 1 loop
          v.extraEvents(i - v.pulseGenParams'length*SZ_C) := x(l + i);

@@ -81,7 +81,7 @@ begin
     req <= '0';
     wait until rising_edge( clk );
 
-    report "Test PASSED -- ";
+    report "Test PASSED -- (won't stop; you have to abort manually) ";
     don <= true;
     wait;
   end process P_DRV;
