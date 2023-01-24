@@ -94,14 +94,19 @@ entity EcEvrWrapper is
     evrStable         : out    std_logic;
 
     timingMGTStatus   : in     std_logic_vector(31 downto 0) := (others => '0');
+    timingMGTControl  : out    std_logic_vector(31 downto 0) := (others => '0');
 
     timingRecClk      : in     std_logic;
     timingRecRst      : in     std_logic;
 
     timingRxData      : in     std_logic_vector(15 downto 0);
-    timingDataK       : in     std_logic_vector( 1 downto 0);
+    timingRxDataK     : in     std_logic_vector( 1 downto 0);
     evrEventsAdj      : out    std_logic_vector( 3 downto 0);
-    pdoTrg            : out    std_logic
+    pdoTrg            : out    std_logic;
+
+    timingTxClk       : in     std_logic;
+    timingTxData      : out    std_logic_vector(15 downto 0) := (others => '0');
+    timingTxDataK     : out    std_logic_vector( 1 downto 0) := (others => '0')
   );
 end entity EcEvrWrapper;
 
@@ -393,7 +398,7 @@ begin
       stream_data_o     => dbusStreamData,
 
       evr_rx_data       => timingRxData,
-      evr_rx_charisk    => timingDataK,
+      evr_rx_charisk    => timingRxDataK,
       mgt_status_i      => timingMGTStatus
     );
 
