@@ -3,11 +3,10 @@ use ieee.std_logic_1164.all;
 use ieee.numeric_std.all;
 
 use work.ESCBasicTypesPkg.all;
-use work.evr320_pkg.all;
 
 package Evr320ConfigPkg is
---constant MaxDurationLd_c : natural := 32;
---constant UsrEventWidthDefault_c : std_logic_vector(MaxDurationLd_c - 1 downto 0) := (2 => '1', 4 => '1', others => '0');
+   constant MaxDurationLd_c        : natural := 32;
+   constant UsrEventWidthDefault_c : std_logic_vector(MaxDurationLd_c - 1 downto 0) := (2 => '1', 4 => '1', others => '0');
 
    constant NUM_EXTRA_EVENTS_C : natural := 4;
 
