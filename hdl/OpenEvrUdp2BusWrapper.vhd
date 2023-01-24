@@ -93,7 +93,7 @@ begin
    evrEvent                 <= eventCodeLoc;
    eventCodeVldLoc          <= toSl( eventCodeLoc /= EVCODE_ZERO_C );
    evrEventVld              <= eventCodeVldLoc;
- 
+
    U_EVR_DC : entity work.evr_dc
       generic map (
          MARK_DEBUG_ENABLE     => "FALSE"
@@ -125,7 +125,7 @@ begin
          refclk_rst            => evrTxRstLoc,
 
          dc_mode               => DC_MODE_DIS_C,
-           
+
          -- flags (refclk domain)
          rx_link_ok            => open, --: out   std_logic; -- Received link ok
 
@@ -156,7 +156,7 @@ begin
          data_out              => bufmemData,
          size_data_out         => open,
          addr_in               => bufmemDWAddr,
-         
+
          -- Data stream interface (event_clk domain)
          event_clk             => eventClkLoc,
          databuf_data          => dbufData,

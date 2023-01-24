@@ -41,7 +41,8 @@ entity EcEvrWrapper is
     GEN_CNF_ILA_G     : boolean := true;
     GEN_I2C_ILA_G     : boolean := true;
     GEN_EEP_ILA_G     : boolean := true;
-    NUM_BUS_SUBS_G    : natural := 0
+    NUM_BUS_SUBS_G    : natural := 0;
+    EVR_FLAVOR_G      : string  := "OPENEVR"
   );
   port (
     sysClk            : in     std_logic;
@@ -112,6 +113,126 @@ end entity EcEvrWrapper;
 
 architecture Impl of EcEvrWrapper is
 
+  component evr320_udp2bus_wrapper is
+    generic(
+      g_BUS_CLOCK_FREQ : natural   := 125000000;    -- Xuser Clk Frequency in Hz
+      g_EVENT_RECORDER : boolean   := false;        -- enable/disable Event Recorder functionality
+      g_DATA_MEMORY_EN : boolean   := true;         -- enable DPRAM data buffer
+      g_N_EVT_DBL_BUFS : natural range 0 to 4 := 4; -- how many double-buffered memories to enable
+      g_DATA_STREAM_EN : natural range 0 to 2 := 2; -- enable streaming interface (1) with fifo (2)
+      g_EVR_FORCE_STBL : std_logic := '0';          -- when '1': force 'evr_stable' <= '1'
+      g_MAX_LATCNT_PER : real      := 0.01;         -- max. period for latency counter; 0.0 never stops
+      g_CS_TIMEOUT_CNT : natural   := 16#15CA20#;   -- data frame checksum timeout (in EVR clks); 0 disables
+      g_EXTRA_RAW_EVTS : natural   := 0             -- additional events to decode (no delay/width)
+    );
+    port(
+      -- ------------------------------------------------------------------------
+      -- Debug interface
+      -- ------------------------------------------------------------------------
+      debug_clk        : out std_logic;
+      debug            : out std_logic_vector(127 downto 0);
+      -- ------------------------------------------------------------------------
+      -- UDP2BUS Interface (bus clock domain, 100-250MHz)
+      -- ------------------------------------------------------------------------
+      bus_CLK          : in  std_logic;
+      bus_RESET        : in  std_logic;
+      bus_Req          : in  Udp2BusReqType;
+      bus_Rep          : out Udp2BusRepType;
+      evr_CfgReq       : in  Evr320ConfigReqType := EVR320_CONFIG_REQ_INIT_C;
+      evr_CfgAck       : Out Evr320ConfigAckType;
+      -- ------------------------------------------------------------------------
+      -- EVR Interface
+      -- ------------------------------------------------------------------------
+      clk_evr          : in  std_logic;
+      rst_evr          : in  std_logic;
+      evr_rx_data      : in  std_logic_vector(15 downto 0);
+      evr_rx_charisk   : in  std_logic_vector( 1 downto 0);
+      mgt_status_i     : in  std_logic_vector(31 downto 0) := (others => '0');
+      mgt_reset_o      : out std_logic;
+      mgt_control_o    : out std_logic_vector(31 downto 0);
+
+      event_o          : out std_logic_vector( 7 downto 0);
+      event_vld_o      : out std_logic;
+      timestamp_hi_o   : out std_logic_vector(31 downto 0);
+      timestamp_lo_o   : out std_logic_vector(31 downto 0);
+      timestamp_strb_o : out std_logic;
+
+      ---------------------------------------------------------------------------
+      -- User interface MGT clock
+      ---------------------------------------------------------------------------
+      evr_stable_o     : out std_logic;
+      usr_events_o     : out std_logic_vector(3 downto 0); -- User defined event pulses with one clock cycles length & no delay
+      usr_events_en_o  : out std_logic_vector(3 downto 0);
+      sos_event_o      : out std_logic;   -- Start-of-Sequence Event
+      --*** new features adjusted in delay & length ***
+      --usr_event_width_i : in  typ_arr_width; --output extend in clock recovery clock cycles event 0,1,2,3
+      --usr_event_delay_i : in  typ_arr_delay; -- delay in recovery clock cycles event sos,0,1,2,3
+      usr_events_adj_o : out std_logic_vector(3 downto 0); -- User defined event pulses adjusted in delay & length
+      sos_events_adj_o : out std_logic;   -- Start-of-Sequence adjusted in delay & length
+      -- additional events to decode; unfortunatelye the register map of the evr320 and the
+      -- associated data types are not easily extendable; therefore we provide an additional bank
+      extra_events_o   : out std_logic_vector(g_EXTRA_RAW_EVTS - 1 downto 0);
+      extra_events_en_o: out std_logic_vector(g_EXTRA_RAW_EVTS - 1 downto 0);
+      --------------------------------------------------------------------------
+      -- Decoder axi stream interface, User clock
+      --------------------------------------------------------------------------
+      stream_clk_i     : in  std_logic := '0';
+      stream_data_o    : out std_logic_vector(7 downto 0);
+      stream_addr_o    : out std_logic_vector(10 downto 0);
+      stream_valid_o   : out std_logic;
+      stream_ready_i   : in  std_logic := '1';
+      stream_clk_o     : out std_logic
+    );
+  end component evr320_udp2bus_wrapper;
+
+  component OpenEvrUdp2BusWrapper is
+    generic (
+      NUM_TRIGS_G        : natural := 8
+    );
+    port (
+      sysClk             : in  std_logic;
+      sysRst             : in  std_logic;
+
+      busReq             : in  Udp2BusReqType;
+      busRep             : out Udp2BusRepType;
+
+      evrCfgReq          : in  Evr320ConfigReqType := EVR320_CONFIG_REQ_INIT_C;
+      evrCfgAck          : out Evr320ConfigAckType;
+
+      evrRxClk           : in  std_logic;
+      evrRxData          : in  std_logic_vector(15 downto 0);
+      evrRxCharIsK       : in  std_logic_vector( 1 downto 0);
+      evrRxDispErr       : in  std_logic_vector( 1 downto 0);
+      evrRxNotIntable    : in  std_logic_vector( 1 downto 0);
+
+      evrTxClk           : in  std_logic;
+      evrTxData          : out std_logic_vector(15 downto 0);
+      evrTxCharIsK       : out std_logic_vector( 1 downto 0);
+      -- RX link status but in TXCLK domain
+      -- (status must be given even if there is no stable rx clock)
+      evrRxLinkOk        : out std_logic;
+
+      mgtStatus          : in  std_logic_vector(31 downto 0);
+      mgtControl         : out std_logic_vector(31 downto 0);
+
+      evrClk             : out std_logic;
+      evrRst             : out std_logic;
+
+      evrEvent           : out std_logic_vector( 7 downto 0);
+      evrEventVld        : out std_logic;
+      evrTimestampHi     : out std_logic_vector(31 downto 0);
+      evrTimestampLo     : out std_logic_vector(31 downto 0);
+      evrTimestampVld    : out std_logic;
+
+      evrTriggers        : out std_logic_vector(NUM_TRIGS_G - 1 downto 0);
+      evrTriggersEn      : out std_logic_vector(NUM_TRIGS_G - 1 downto 0);
+
+      evrStreamVld       : out std_logic;
+      evrStreamAddr      : out std_logic_vector(10 downto 0);
+      evrStreamData      : out std_logic_vector( 7 downto 0)
+    );
+  end component OpenEvrUdp2BusWrapper;
+
   constant NUM_BUS_MSTS_C           : natural := 1;
   constant BUS_MIDX_PDO_C           : natural := 0;
 
@@ -152,6 +273,8 @@ architecture Impl of EcEvrWrapper is
   constant I2C_MST_BUS_C            : natural :=  2;
 
   constant GEN_FOE_C                : boolean := (SPI_FILE_MAP_G'length > 0 );
+
+  constant NUM_TRIGGERS_C           : natural := 4 + NUM_EXTRA_EVENTS_C;
 
   signal configReq      : EEPROMConfigReqType;
   signal configAck      : EEPROMConfigAckType := EEPROM_CONFIG_ACK_ASSERT_C;
@@ -237,7 +360,7 @@ architecture Impl of EcEvrWrapper is
 
   signal progress        : std_logic_vector( 3 downto 0);
 
-  signal evrStableLoc    : std_logic;
+  signal evrStableLoc    : std_logic     := '1';
 
   signal pdoTrgLoc       : std_logic;
   signal dbufReceived    : std_logic;
@@ -246,7 +369,14 @@ architecture Impl of EcEvrWrapper is
   signal dbusStreamData  : std_logic_vector( 7 downto 0);
   signal dbusStreamValid : std_logic;
 
+  signal eventClk        : std_logic;
+  signal eventRst        : std_logic;
+
 begin
+
+  assert EVR_FLAVOR_G = "OPENEVR" or EVR_FLAVOR_G = "PSI"
+    report "Unsupported EVR_FLAVOR_G (supported: OPENEVR, PSI)"
+    severity failure;
 
   bus1SubRep(NUM_BUS_SUBS_C - 1 downto NUM_LOC_SUBS_C) <= busReps;
   busReqs                                              <= bus1SubReq(NUM_BUS_SUBS_C - 1 downto NUM_LOC_SUBS_C);
@@ -361,46 +491,117 @@ begin
       foeDebug        => foeDebug
     );
 
-  U_EVR : entity work.evr320_udp2bus_wrapper
-    generic map (
-      g_BUS_CLOCK_FREQ  => natural( CLK_FREQ_G ),
-      g_N_EVT_DBL_BUFS  => 0,
-      g_DATA_STREAM_EN  => 1,
-      g_EXTRA_RAW_EVTS  => NUM_EXTRA_EVENTS_C
-    )
-    port map (
-      bus_CLK           => sysClk,
-      bus_RESET         => sysRst,
+  G_PSI_EVR : if ( EVR_FLAVOR_G = "PSI" ) generate
 
-      bus_Req           => bus2SubReq(BUS_2IDX_EVR_C),
-      bus_Rep           => bus2SubRep(BUS_2IDX_EVR_C),
+    eventClk <= timingRecClk;
+    eventRst <= timingRecRst;
 
-      evr_CfgReq        => configReq.evr320,
-      evr_CfgAck        => configAck.evr320,
+    U_EVR : component evr320_udp2bus_wrapper
+      generic map (
+        g_BUS_CLOCK_FREQ  => natural( CLK_FREQ_G ),
+        g_N_EVT_DBL_BUFS  => 0,
+        g_DATA_STREAM_EN  => 1,
+        g_EXTRA_RAW_EVTS  => NUM_EXTRA_EVENTS_C
+      )
+      port map (
+        bus_CLK           => sysClk,
+        bus_RESET         => sysRst,
 
-      clk_evr           => timingRecClk,
-      rst_evr           => timingRecRst,
+        bus_Req           => bus2SubReq(BUS_2IDX_EVR_C),
+        bus_Rep           => bus2SubRep(BUS_2IDX_EVR_C),
 
-      evr_stable_o      => evrStableLoc,
+        evr_CfgReq        => configReq.evr320,
+        evr_CfgAck        => configAck.evr320,
 
-      usr_events_adj_o  => usr_events_adj,
-      usr_events_en_o   => usr_events_en,
-      extra_events_o    => extra_events,
-      extra_events_en_o => extra_events_en,
+        clk_evr           => timingRecClk,
+        rst_evr           => timingRecRst,
 
-      event_o           => eventCode,
-      event_vld_o       => eventCodeVld,
-      timestamp_hi_o    => evrTimestampHi,
-      timestamp_lo_o    => evrTimestampLo,
+        evr_stable_o      => evrStableLoc,
 
-      stream_valid_o    => dbusStreamValid,
-      stream_addr_o     => dbusStreamAddr,
-      stream_data_o     => dbusStreamData,
+        usr_events_adj_o  => usr_events_adj,
+        usr_events_en_o   => usr_events_en,
+        extra_events_o    => extra_events,
+        extra_events_en_o => extra_events_en,
 
-      evr_rx_data       => timingRxData,
-      evr_rx_charisk    => timingRxDataK,
-      mgt_status_i      => timingMGTStatus
-    );
+        event_o           => eventCode,
+        event_vld_o       => eventCodeVld,
+        timestamp_hi_o    => evrTimestampHi,
+        timestamp_lo_o    => evrTimestampLo,
+
+        stream_valid_o    => dbusStreamValid,
+        stream_addr_o     => dbusStreamAddr,
+        stream_data_o     => dbusStreamData,
+
+        evr_rx_data       => timingRxData,
+        evr_rx_charisk    => timingRxDataK,
+        mgt_status_i      => timingMGTStatus
+      );
+  end generate G_PSI_EVR;
+
+  G_OPEN_EVR : if ( EVR_FLAVOR_G = "OPENEVR" ) generate
+
+    signal timingDispErr          : std_logic_vector(1 downto 0);
+    signal timingNotIntable       : std_logic_vector(1 downto 0);
+
+    signal evrTriggers            : std_logic_vector(NUM_TRIGGERS_C - 1 downto 0);
+    signal evrTriggersEnabled     : std_logic_vector(NUM_TRIGGERS_C - 1 downto 0);
+
+  begin
+
+    timingDispErr          <= timingMGTStatus( 23 downto 22 );
+    timingNotIntable       <= timingMGTStatus( 21 downto 20 );
+  
+    U_OPEN_EVR : component OpenEvrUdp2BusWrapper
+      generic map (
+        NUM_TRIGS_G        => NUM_TRIGGERS_C
+      )
+      port map (
+        sysClk             => sysClk,
+        sysRst             => sysRst,
+
+        busReq             => bus2SubReq(BUS_2IDX_EVR_C),
+        busRep             => bus2SubRep(BUS_2IDX_EVR_C),
+
+        evrCfgReq          => configReq.evr320,
+        evrCfgAck          => configAck.evr320,
+
+        evrRxClk           => timingRecClk,
+        evrRxData          => timingRxData,
+        evrRxCharIsK       => timingRxDataK,
+        evrRxDispErr       => timingDispErr,
+        evrRxNotIntable    => timingNotIntable,
+
+        evrTxClk           => timingTxClk,
+        evrTxData          => timingTxData,
+        evrTxCharIsK       => timingTxDataK,
+        evrRxLinkOk        => evrStableLoc,
+
+        mgtStatus          => timingMGTStatus,
+        mgtControl         => timingMGTControl,
+
+        evrClk             => eventClk,
+        evrRst             => eventRst,
+
+        evrEvent           => eventCode,
+        evrEventVld        => eventCodeVld,
+        evrTimestampHi     => evrTimestampHi,
+        evrTimestampLo     => evrTimestampLo,
+        evrTimestampVld    => open,
+
+        evrTriggers        => evrTriggers,
+        evrTriggersEn      => evrTriggersEnabled,
+
+        evrStreamVld       => dbusStreamValid,
+        evrStreamAddr      => dbusStreamAddr,
+        evrStreamData      => dbusStreamData
+      );
+
+    usr_events_adj  <= evrTriggers( usr_events_adj'range );
+    extra_events    <= evrTriggers( evrTriggers'left downto usr_events_adj'length );
+
+    usr_events_en   <= evrTriggersEnabled( usr_events_en'range );
+    extra_events_en <= evrTriggersEnabled( evrTriggersEnabled'left downto usr_events_en'length );
+  end generate G_OPEN_EVR;
 
   U_SYNC_EVR_STABLE : entity work.SynchronizerBit
     port map (
@@ -421,10 +622,10 @@ begin
     end loop;
   end process P_LATCH_IN;
 
-  P_LATCH : process ( timingRecClk ) is
+  P_LATCH : process ( eventClk ) is
   begin
-    if ( rising_edge( timingRecClk ) ) then
-      if ( timingRecRst = '1' ) then
+    if ( rising_edge( eventClk ) ) then
+      if ( eventRst = '1' ) then
         latchedEvents <= (others => '0');
       else
         if ( ( not latchedEvents(0) and latch(0) ) = '1' ) then
@@ -455,8 +656,8 @@ begin
       TXPDO_ADDR_G       => unsigned(ESC_SM3_SMA_C)
     )
     port map (
-      evrClk             => timingRecClk,
-      evrRst             => timingRecRst,
+      evrClk             => eventClk,
+      evrRst             => eventRst,
 
       pdoTrg             => pdoTrgLoc,
       tsHi               => evrTimestampHi,

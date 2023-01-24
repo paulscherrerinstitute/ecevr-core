@@ -5,21 +5,27 @@ use ieee.numeric_std.all;
 use work.ESCBasicTypesPkg.all;
 
 package Evr320ConfigPkg is
-   constant MaxDurationLd_c        : natural := 32;
-   constant UsrEventWidthDefault_c : std_logic_vector(MaxDurationLd_c - 1 downto 0) := (2 => '1', 4 => '1', others => '0');
+   constant MAX_DURATION_LD_C      : natural := 32;
 
-   constant NUM_EXTRA_EVENTS_C : natural := 4;
+   subtype EvrDurationType     is std_logic_vector(MAX_DURATION_LD_C - 1 downto 0);
+   
+   function toEvrDuration(constant x : in natural)
+   return EvrDurationType;
+
+   constant PULSE_WIDTH_DEFAULT_C  : EvrDurationType := toEvrDuration( 20 );
+
+   constant NUM_EXTRA_EVENTS_C     : natural := 4;
 
    type Evr320PulseGenConfigType is record 
-      pulseWidth : std_logic_vector(MaxDurationLd_c-1 downto 0);
-      pulseDelay : std_logic_vector(MaxDurationLd_c-1 downto 0);
+      pulseWidth : EvrDurationType;
+      pulseDelay : EvrDurationType;
       pulseEvent : std_logic_vector(                7 downto 0);
       pulseEnbld : std_logic;
       pulseInvrt : std_logic;
    end record Evr320PulseGenConfigType;
 
    constant EVR320_PULSE_GEN_CONFIG_INIT_C : Evr320PulseGenConfigType := (
-      pulseWidth => UsrEventWidthDefault_c,
+      pulseWidth => PULSE_WIDTH_DEFAULT_C,
       pulseDelay => (others => '0'),
       pulseEvent => (others => '0'),
       pulseEnbld => '0',
@@ -106,5 +112,10 @@ package body Evr320ConfigPkg is
       end loop;
       return v;
    end function toEvr320ConfigReqType;
+   
+   function toEvrDuration(constant x : in natural) return EvrDurationType is
+   begin
+      return EvrDurationType( to_unsigned( x, EvrDurationType'length ) );
+   end function toEvrDuration;
 
 end package body Evr320ConfigPkg;
