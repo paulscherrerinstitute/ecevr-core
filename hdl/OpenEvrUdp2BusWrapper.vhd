@@ -31,6 +31,9 @@ entity OpenEvrUdp2BusWrapper is
       evrTxClk           : in  std_logic;
       evrTxData          : out std_logic_vector(15 downto 0);
       evrTxCharIsK       : out std_logic_vector( 1 downto 0);
+      -- RX link status but in TXCLK domain
+      -- (status must be given even if there is no stable rx clock)
+      evrRxLinkOk        : out std_logic;
 
       mgtStatus          : in  std_logic_vector(31 downto 0);
       mgtControl         : out std_logic_vector(31 downto 0);
@@ -96,7 +99,7 @@ begin
 
    U_EVR_DC : entity work.evr_dc
       generic map (
-         MARK_DEBUG_ENABLE     => "FALSE"
+         MARK_DEBUG_ENABLE     => "TRUE"
       )
       port map (
          -- System bus clock
@@ -127,7 +130,7 @@ begin
          dc_mode               => DC_MODE_DIS_C,
 
          -- flags (refclk domain)
-         rx_link_ok            => open, --: out   std_logic; -- Received link ok
+         rx_link_ok            => evrRxLinkOk,
 
          event_txd             => EVCODE_ZERO_C,
          dbus_txd              => DBUS_ZERO_C,
@@ -211,6 +214,10 @@ begin
       evrTxCharIsK          <= mgtIb.tx_charisk;
 
       mgtControl            <= (others => '0');
+      -- txPll: bit 0, rxPll: bit 16
+      mgtControl( 0)        <= mgtIb.tx_rst;
+      mgtControl(16)        <= mgtIb.rx_rst;
+      -- control bits 1,17 set the MGT TX/RX polarity
    end process P_MGT_COMB;
 
 end architecture Impl;
