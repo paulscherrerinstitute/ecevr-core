@@ -15,6 +15,7 @@ use ieee.numeric_std.all;
 use work.evr320_pkg.all;
 use work.Udp2BusPkg.all;
 use work.Evr320ConfigPkg.all;
+use work.EcEvrBspPkg.all;
 
 entity evr320_udp2bus_wrapper is
   generic(
@@ -26,7 +27,9 @@ entity evr320_udp2bus_wrapper is
     g_EVR_FORCE_STBL : std_logic := '0';          -- when '1': force 'evr_stable' <= '1'
     g_MAX_LATCNT_PER : real      := 0.01;         -- max. period for latency counter; 0.0 never stops
     g_CS_TIMEOUT_CNT : natural   := 16#15CA20#;   -- data frame checksum timeout (in EVR clks); 0 disables
-    g_EXTRA_RAW_EVTS : natural   := 0             -- additional events to decode (no delay/width)
+    g_EXTRA_RAW_EVTS : natural   := 0;            -- additional events to decode (no delay/width)
+    g_RX_POLA_INVERT : std_logic := '0';
+    g_TX_POLA_INVERT : std_logic := '0'
   );
   port(
     -- ------------------------------------------------------------------------
@@ -50,9 +53,9 @@ entity evr320_udp2bus_wrapper is
     rst_evr          : in  std_logic;
     evr_rx_data      : in  std_logic_vector(15 downto 0);
     evr_rx_charisk   : in  std_logic_vector( 1 downto 0);
-    mgt_status_i     : in  std_logic_vector(31 downto 0) := (others => '0');
+    mgt_status_i     : in  EvrMGTStatusType;
     mgt_reset_o      : out std_logic;
-    mgt_control_o    : out std_logic_vector(31 downto 0);
+    mgt_control_o    : out EvrMGTControlType;
 
     event_o          : out std_logic_vector( 7 downto 0);
     event_vld_o      : out std_logic;
@@ -135,6 +138,8 @@ architecture rtl of evr320_udp2bus_wrapper is
   signal timestampLoMode_xuser        : std_logic                     := '0';
   signal usr_status                   : std_logic_vector(31 downto 0) := (others => '0');
   signal usr_control                  : std_logic_vector(31 downto 0);
+  signal evr_rx_data_l                : std_logic_vector(15 downto 0);
+  signal evr_rx_charisk_l             : std_logic_vector( 1 downto 0);
 
   signal extra_events                 : typ_arr8(g_EXTRA_RAW_EVTS - 1 downto 0) := ( others => (others => '0') );
 
@@ -148,6 +153,9 @@ architecture rtl of evr320_udp2bus_wrapper is
   signal evr_rst_s         : std_logic;
   signal usr_event_delay_s : typ_arr_delay;
   signal usr_event_width_s : typ_arr_width;
+
+  signal mgt_control_l     : std_logic_vector(31 downto 0);
+  signal mgt_status_l      : std_logic_vector(31 downto 0);
 
   -- ----------------------------------------------------------------------------
   -- ----------------------------------------------------------------------------
@@ -206,8 +214,8 @@ begin
       -- GTX parallel interface
       i_mgt_rst             => rst_evr,
       i_mgt_rx_clk          => clk_evr,
-      i_mgt_rx_data         => evr_rx_data,
-      i_mgt_rx_charisk      => evr_rx_charisk,
+      i_mgt_rx_data         => evr_rx_data_l,
+      i_mgt_rx_charisk      => evr_rx_charisk_l,
       o_decoder_status      => decoder_status,
       -- User interface CPU clock
       i_usr_clk             => mem_clk,
@@ -259,9 +267,9 @@ begin
       evr_evt_rec_control_o      => event_recorder_control_xuser,
       evr_latency_measure_stat_i => evr_latency_measure_stat,
       evr_latency_measure_ctrl_o => evr_latency_measure_ctrl,
-      mgt_status_i               => mgt_status_i,
+      mgt_status_i               => mgt_status_l,
       mgt_reset_o                => mgt_reset_o,
-      mgt_control_o              => mgt_control_o,
+      mgt_control_o              => mgt_control_l,
       mem_clk_o                  => mem_clk,
       mem_addr_o                 => mem_addr_tosca,
       mem_data_i                 => mem_data,
@@ -418,8 +426,8 @@ begin
 
   begin
 
-    rxpll_locked <= mgt_status_i(1);
-    mmcm_locked  <= mgt_status_i(2);
+    rxpll_locked <= mgt_status_i.rxPllLocked;
+    mmcm_locked  <= '1';
     evr_rst_in   <= bus_RESET or (not rxpll_locked) or (not mmcm_locked);
 
     --*** double stage sync for reset ***--
@@ -530,6 +538,32 @@ begin
   timestamp_strb_o <= timestampStrobe;
 
   usr_events_en_o  <= evr_params.event_enable;
+
+  P_MAP : process ( mgt_status_i, mgt_control_l, evr_rx_data, evr_rx_charisk ) is
+  begin
+    mgt_status_l                          <= (others => '0');
+    mgt_status_l(1)                       <= mgt_status_i.rxPllLocked;
+    mgt_status_l(4)                       <= mgt_status_i.rxResetDone;
+    mgt_status_l(15)                      <= '0'; --  RXLOSSOFSYNC
+
+    mgt_control_o                         <= EVR_MGT_CONTROL_INIT_C;
+
+    mgt_control_o.rxReset                 <= mgt_control_l(0);
+    mgt_control_o.rxPolarityInvert        <= g_RX_POLA_INVERT;
+
+    mgt_control_o.txReset                 <= mgt_control_l(8);
+    mgt_control_o.txPolarityInvert        <= g_TX_POLA_INVERT;
+
+    if ( mgt_control_l(4) = '1' ) then
+       evr_rx_data_l(15 downto 8)         <= evr_rx_data( 7 downto 0);
+       evr_rx_data_l( 7 downto 0)         <= evr_rx_data(15 downto 8);
+       evr_rx_charisk_l(1)                <= evr_rx_charisk(0);
+       evr_rx_charisk_l(0)                <= evr_rx_charisk(1);
+    else
+       evr_rx_data_l                      <= evr_rx_data;
+       evr_rx_charisk_l                   <= evr_rx_charisk;
+    end if;
+  end process P_MAP;
 
 end rtl;
 -- ----------------------------------------------------------------------------

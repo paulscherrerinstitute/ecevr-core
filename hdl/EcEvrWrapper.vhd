@@ -29,20 +29,22 @@ entity EcEvrWrapper is
     EEP_I2C_MUX_SEL_G : std_logic_vector(3 downto 0) := "0000";
     -- FOE disabled if the file map is empty
     SPI_FILE_MAP_G    : FlashFileArray := FLASH_FILE_ARRAY_EMPTY_C;
-    SPI_CLK_FREQ_G    : real    := 10.0E6;
+    SPI_CLK_FREQ_G    : real           := 10.0E6;
     -- erase block size
-    SPI_LD_BLK_SZ_G   : natural := 16;
-    SPI_LD_PAGE_SZ_G  : natural := 8;
-    GEN_HBI_ILA_G     : boolean := true;
-    GEN_ESC_ILA_G     : boolean := true;
-    GEN_EOE_ILA_G     : boolean := true;
-    GEN_FOE_ILA_G     : boolean := true;
-    GEN_U2B_ILA_G     : boolean := true;
-    GEN_CNF_ILA_G     : boolean := true;
-    GEN_I2C_ILA_G     : boolean := true;
-    GEN_EEP_ILA_G     : boolean := true;
-    NUM_BUS_SUBS_G    : natural := 0;
-    EVR_FLAVOR_G      : string  := "OPENEVR"
+    SPI_LD_BLK_SZ_G   : natural        := 16;
+    SPI_LD_PAGE_SZ_G  : natural        := 8;
+    GEN_HBI_ILA_G     : boolean        := true;
+    GEN_ESC_ILA_G     : boolean        := true;
+    GEN_EOE_ILA_G     : boolean        := true;
+    GEN_FOE_ILA_G     : boolean        := true;
+    GEN_U2B_ILA_G     : boolean        := true;
+    GEN_CNF_ILA_G     : boolean        := true;
+    GEN_I2C_ILA_G     : boolean        := true;
+    GEN_EEP_ILA_G     : boolean        := true;
+    NUM_BUS_SUBS_G    : natural        := 0;
+    EVR_FLAVOR_G      : string         := "OPENEVR";
+    RX_POL_INVERT_G   : std_logic      := '0';
+    TX_POL_INVERT_G   : std_logic      := '0'
   );
   port (
     sysClk            : in     std_logic;
@@ -94,8 +96,8 @@ entity EcEvrWrapper is
     -- synchronized into sysClk
     evrStable         : out    std_logic;
 
-    timingMGTStatus   : in     std_logic_vector(31 downto 0) := (others => '0');
-    timingMGTControl  : out    std_logic_vector(31 downto 0) := (others => '0');
+    timingMGTStatus   : in     EvrMGTStatusType;
+    timingMGTControl  : out    EvrMGTControlType;
 
     timingRecClk      : in     std_logic;
     timingRecRst      : in     std_logic;
@@ -114,80 +116,84 @@ end entity EcEvrWrapper;
 architecture Impl of EcEvrWrapper is
 
   component evr320_udp2bus_wrapper is
-    generic(
-      g_BUS_CLOCK_FREQ : natural   := 125000000;    -- Xuser Clk Frequency in Hz
-      g_EVENT_RECORDER : boolean   := false;        -- enable/disable Event Recorder functionality
-      g_DATA_MEMORY_EN : boolean   := true;         -- enable DPRAM data buffer
-      g_N_EVT_DBL_BUFS : natural range 0 to 4 := 4; -- how many double-buffered memories to enable
-      g_DATA_STREAM_EN : natural range 0 to 2 := 2; -- enable streaming interface (1) with fifo (2)
-      g_EVR_FORCE_STBL : std_logic := '0';          -- when '1': force 'evr_stable' <= '1'
-      g_MAX_LATCNT_PER : real      := 0.01;         -- max. period for latency counter; 0.0 never stops
-      g_CS_TIMEOUT_CNT : natural   := 16#15CA20#;   -- data frame checksum timeout (in EVR clks); 0 disables
-      g_EXTRA_RAW_EVTS : natural   := 0             -- additional events to decode (no delay/width)
-    );
-    port(
-      -- ------------------------------------------------------------------------
-      -- Debug interface
-      -- ------------------------------------------------------------------------
-      debug_clk        : out std_logic;
-      debug            : out std_logic_vector(127 downto 0);
-      -- ------------------------------------------------------------------------
-      -- UDP2BUS Interface (bus clock domain, 100-250MHz)
-      -- ------------------------------------------------------------------------
-      bus_CLK          : in  std_logic;
-      bus_RESET        : in  std_logic;
-      bus_Req          : in  Udp2BusReqType;
-      bus_Rep          : out Udp2BusRepType;
-      evr_CfgReq       : in  Evr320ConfigReqType := EVR320_CONFIG_REQ_INIT_C;
-      evr_CfgAck       : Out Evr320ConfigAckType;
-      -- ------------------------------------------------------------------------
-      -- EVR Interface
-      -- ------------------------------------------------------------------------
-      clk_evr          : in  std_logic;
-      rst_evr          : in  std_logic;
-      evr_rx_data      : in  std_logic_vector(15 downto 0);
-      evr_rx_charisk   : in  std_logic_vector( 1 downto 0);
-      mgt_status_i     : in  std_logic_vector(31 downto 0) := (others => '0');
-      mgt_reset_o      : out std_logic;
-      mgt_control_o    : out std_logic_vector(31 downto 0);
+  generic(
+    g_BUS_CLOCK_FREQ : natural   := 125000000;    -- Xuser Clk Frequency in Hz
+    g_EVENT_RECORDER : boolean   := false;        -- enable/disable Event Recorder functionality
+    g_DATA_MEMORY_EN : boolean   := true;         -- enable DPRAM data buffer
+    g_N_EVT_DBL_BUFS : natural range 0 to 4 := 4; -- how many double-buffered memories to enable
+    g_DATA_STREAM_EN : natural range 0 to 2 := 2; -- enable streaming interface (1) with fifo (2)
+    g_EVR_FORCE_STBL : std_logic := '0';          -- when '1': force 'evr_stable' <= '1'
+    g_MAX_LATCNT_PER : real      := 0.01;         -- max. period for latency counter; 0.0 never stops
+    g_CS_TIMEOUT_CNT : natural   := 16#15CA20#;   -- data frame checksum timeout (in EVR clks); 0 disables
+    g_EXTRA_RAW_EVTS : natural   := 0;            -- additional events to decode (no delay/width)
+    g_RX_POLA_INVERT : std_logic := '0';
+    g_TX_POLA_INVERT : std_logic := '0'
+  );
+  port(
+    -- ------------------------------------------------------------------------
+    -- Debug interface
+    -- ------------------------------------------------------------------------
+    debug_clk        : out std_logic;
+    debug            : out std_logic_vector(127 downto 0);
+    -- ------------------------------------------------------------------------
+    -- UDP2BUS Interface (bus clock domain, 100-250MHz)
+    -- ------------------------------------------------------------------------
+    bus_CLK          : in  std_logic;
+    bus_RESET        : in  std_logic;
+    bus_Req          : in  Udp2BusReqType;
+    bus_Rep          : out Udp2BusRepType;
+    evr_CfgReq       : in  Evr320ConfigReqType := EVR320_CONFIG_REQ_INIT_C;
+    evr_CfgAck       : Out Evr320ConfigAckType;
+    -- ------------------------------------------------------------------------
+    -- EVR Interface
+    -- ------------------------------------------------------------------------
+    clk_evr          : in  std_logic;
+    rst_evr          : in  std_logic;
+    evr_rx_data      : in  std_logic_vector(15 downto 0);
+    evr_rx_charisk   : in  std_logic_vector( 1 downto 0);
+    mgt_status_i     : in  EvrMGTStatusType;
+    mgt_reset_o      : out std_logic;
+    mgt_control_o    : out EvrMGTControlType;
 
-      event_o          : out std_logic_vector( 7 downto 0);
-      event_vld_o      : out std_logic;
-      timestamp_hi_o   : out std_logic_vector(31 downto 0);
-      timestamp_lo_o   : out std_logic_vector(31 downto 0);
-      timestamp_strb_o : out std_logic;
+    event_o          : out std_logic_vector( 7 downto 0);
+    event_vld_o      : out std_logic;
+    timestamp_hi_o   : out std_logic_vector(31 downto 0);
+    timestamp_lo_o   : out std_logic_vector(31 downto 0);
+    timestamp_strb_o : out std_logic;
 
-      ---------------------------------------------------------------------------
-      -- User interface MGT clock
-      ---------------------------------------------------------------------------
-      evr_stable_o     : out std_logic;
-      usr_events_o     : out std_logic_vector(3 downto 0); -- User defined event pulses with one clock cycles length & no delay
-      usr_events_en_o  : out std_logic_vector(3 downto 0);
-      sos_event_o      : out std_logic;   -- Start-of-Sequence Event
-      --*** new features adjusted in delay & length ***
-      --usr_event_width_i : in  typ_arr_width; --output extend in clock recovery clock cycles event 0,1,2,3
-      --usr_event_delay_i : in  typ_arr_delay; -- delay in recovery clock cycles event sos,0,1,2,3
-      usr_events_adj_o : out std_logic_vector(3 downto 0); -- User defined event pulses adjusted in delay & length
-      sos_events_adj_o : out std_logic;   -- Start-of-Sequence adjusted in delay & length
-      -- additional events to decode; unfortunatelye the register map of the evr320 and the
-      -- associated data types are not easily extendable; therefore we provide an additional bank
-      extra_events_o   : out std_logic_vector(g_EXTRA_RAW_EVTS - 1 downto 0);
-      extra_events_en_o: out std_logic_vector(g_EXTRA_RAW_EVTS - 1 downto 0);
-      --------------------------------------------------------------------------
-      -- Decoder axi stream interface, User clock
-      --------------------------------------------------------------------------
-      stream_clk_i     : in  std_logic := '0';
-      stream_data_o    : out std_logic_vector(7 downto 0);
-      stream_addr_o    : out std_logic_vector(10 downto 0);
-      stream_valid_o   : out std_logic;
-      stream_ready_i   : in  std_logic := '1';
-      stream_clk_o     : out std_logic
-    );
+    ---------------------------------------------------------------------------
+    -- User interface MGT clock
+    ---------------------------------------------------------------------------
+    evr_stable_o     : out std_logic;
+    usr_events_o     : out std_logic_vector(3 downto 0); -- User defined event pulses with one clock cycles length & no delay
+    usr_events_en_o  : out std_logic_vector(3 downto 0);
+    sos_event_o      : out std_logic;   -- Start-of-Sequence Event
+    --*** new features adjusted in delay & length ***
+    --usr_event_width_i : in  typ_arr_width; --output extend in clock recovery clock cycles event 0,1,2,3
+    --usr_event_delay_i : in  typ_arr_delay; -- delay in recovery clock cycles event sos,0,1,2,3
+    usr_events_adj_o : out std_logic_vector(3 downto 0); -- User defined event pulses adjusted in delay & length
+    sos_events_adj_o : out std_logic;   -- Start-of-Sequence adjusted in delay & length
+    -- additional events to decode; unfortunatelye the register map of the evr320 and the
+    -- associated data types are not easily extendable; therefore we provide an additional bank
+    extra_events_o   : out std_logic_vector(g_EXTRA_RAW_EVTS - 1 downto 0);
+    extra_events_en_o: out std_logic_vector(g_EXTRA_RAW_EVTS - 1 downto 0);
+    --------------------------------------------------------------------------
+    -- Decoder axi stream interface, User clock
+    --------------------------------------------------------------------------
+    stream_clk_i     : in  std_logic := '0';
+    stream_data_o    : out std_logic_vector(7 downto 0);
+    stream_addr_o    : out std_logic_vector(10 downto 0);
+    stream_valid_o   : out std_logic;
+    stream_ready_i   : in  std_logic := '1';
+    stream_clk_o     : out std_logic
+  );
   end component evr320_udp2bus_wrapper;
 
   component OpenEvrUdp2BusWrapper is
     generic (
-      NUM_TRIGS_G        : natural := 8
+      NUM_TRIGS_G        : natural   := 8;
+      RX_POL_INVERT_G    : std_logic := '0';
+      TX_POL_INVERT_G    : std_logic := '0'
     );
     port (
       sysClk             : in  std_logic;
@@ -202,8 +208,6 @@ architecture Impl of EcEvrWrapper is
       evrRxClk           : in  std_logic;
       evrRxData          : in  std_logic_vector(15 downto 0);
       evrRxCharIsK       : in  std_logic_vector( 1 downto 0);
-      evrRxDispErr       : in  std_logic_vector( 1 downto 0);
-      evrRxNotIntable    : in  std_logic_vector( 1 downto 0);
 
       evrTxClk           : in  std_logic;
       evrTxData          : out std_logic_vector(15 downto 0);
@@ -212,8 +216,8 @@ architecture Impl of EcEvrWrapper is
       -- (status must be given even if there is no stable rx clock)
       evrRxLinkOk        : out std_logic;
 
-      mgtStatus          : in  std_logic_vector(31 downto 0);
-      mgtControl         : out std_logic_vector(31 downto 0);
+      mgtStatus          : in  EvrMGTStatusType;
+      mgtControl         : out EvrMGTControlType;
 
       evrClk             : out std_logic;
       evrRst             : out std_logic;
@@ -501,7 +505,9 @@ begin
         g_BUS_CLOCK_FREQ  => natural( CLK_FREQ_G ),
         g_N_EVT_DBL_BUFS  => 0,
         g_DATA_STREAM_EN  => 1,
-        g_EXTRA_RAW_EVTS  => NUM_EXTRA_EVENTS_C
+        g_EXTRA_RAW_EVTS  => NUM_EXTRA_EVENTS_C,
+        g_RX_POLA_INVERT  => RX_POL_INVERT_G,
+        g_TX_POLA_INVERT  => TX_POL_INVERT_G
       )
       port map (
         bus_CLK           => sysClk,
@@ -540,20 +546,16 @@ begin
 
   G_OPEN_EVR : if ( EVR_FLAVOR_G = "OPENEVR" ) generate
 
-    signal timingDispErr          : std_logic_vector(1 downto 0);
-    signal timingNotIntable       : std_logic_vector(1 downto 0);
-
     signal evrTriggers            : std_logic_vector(NUM_TRIGGERS_C - 1 downto 0);
     signal evrTriggersEnabled     : std_logic_vector(NUM_TRIGGERS_C - 1 downto 0);
 
   begin
 
-    timingDispErr          <= timingMGTStatus( 23 downto 22 );
-    timingNotIntable       <= timingMGTStatus( 21 downto 20 );
-  
     U_OPEN_EVR : component OpenEvrUdp2BusWrapper
       generic map (
-        NUM_TRIGS_G        => NUM_TRIGGERS_C
+        NUM_TRIGS_G        => NUM_TRIGGERS_C,
+        RX_POL_INVERT_G    => RX_POL_INVERT_G,
+        TX_POL_INVERT_G    => TX_POL_INVERT_G
       )
       port map (
         sysClk             => sysClk,
@@ -568,8 +570,6 @@ begin
         evrRxClk           => timingRecClk,
         evrRxData          => timingRxData,
         evrRxCharIsK       => timingRxDataK,
-        evrRxDispErr       => timingDispErr,
-        evrRxNotIntable    => timingNotIntable,
 
         evrTxClk           => timingTxClk,
         evrTxData          => timingTxData,

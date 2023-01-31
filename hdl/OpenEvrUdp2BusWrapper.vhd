@@ -7,10 +7,13 @@ use work.ESCBasicTypesPkg.all;
 use work.Udp2BusPkg.all;
 use work.Evr320ConfigPkg.all;
 use work.transceiver_pkg.all;
+use work.EcEvrBspPkg.all;
 
 entity OpenEvrUdp2BusWrapper is
    generic (
-      NUM_TRIGS_G        : natural := 8
+      NUM_TRIGS_G        : natural   := 8;
+      RX_POL_INVERT_G    : std_logic := '0';
+      TX_POL_INVERT_G    : std_logic := '0'
    );
    port (
       sysClk             : in  std_logic;
@@ -25,8 +28,6 @@ entity OpenEvrUdp2BusWrapper is
       evrRxClk           : in  std_logic;
       evrRxData          : in  std_logic_vector(15 downto 0);
       evrRxCharIsK       : in  std_logic_vector( 1 downto 0);
-      evrRxDispErr       : in  std_logic_vector( 1 downto 0);
-      evrRxNotIntable    : in  std_logic_vector( 1 downto 0);
 
       evrTxClk           : in  std_logic;
       evrTxData          : out std_logic_vector(15 downto 0);
@@ -35,8 +36,8 @@ entity OpenEvrUdp2BusWrapper is
       -- (status must be given even if there is no stable rx clock)
       evrRxLinkOk        : out std_logic;
 
-      mgtStatus          : in  std_logic_vector(31 downto 0);
-      mgtControl         : out std_logic_vector(31 downto 0);
+      mgtStatus          : in  EvrMGTStatusType;
+      mgtControl         : out EvrMGTControlType;
 
       evrClk             : out std_logic;
       evrRst             : out std_logic;
@@ -194,30 +195,30 @@ begin
       evrRxClk,
       evrRxData,
       evrRxCharIsK,
-      evrRxDispErr,
-      evrRxNotIntable,
       evrTxClk,
       mgtStatus,
       mgtIb ) is
    begin
-      mgtOb                 <= EVR_TRANSCEIVER_OB_INIT_C;
-      mgtOb.rx_usr_clk      <= evrRxClk;
-      mgtOb.rx_data         <= evrRxData;
-      mgtOb.rx_charisk      <= evrRxCharIsK;
-      mgtOb.rx_disperr      <= evrRxDispErr;
-      mgtOb.rx_notintable   <= evrRxNotIntable;
+      mgtOb                                  <= EVR_TRANSCEIVER_OB_INIT_C;
+      mgtOb.rx_usr_clk                       <= evrRxClk;
+      mgtOb.rx_data                          <= evrRxData;
+      mgtOb.rx_charisk                       <= evrRxCharIsK;
+      mgtOb.rx_disperr                       <= mgtStatus.rxDispErr;
+      mgtOb.rx_notintable                    <= mgtStatus.rxNotIntable;
 
-      mgtOb.tx_usr_clk      <= evrTxClk;
-      mgtOb.cpll_locked     <= mgtStatus(1);
+      mgtOb.tx_usr_clk                       <= evrTxClk;
+      mgtOb.cpll_locked                      <= mgtStatus(1);
 
-      evrTxData             <= mgtIb.tx_data;
-      evrTxCharIsK          <= mgtIb.tx_charisk;
+      evrTxData                              <= mgtIb.tx_data;
+      evrTxCharIsK                           <= mgtIb.tx_charisk;
 
-      mgtControl            <= (others => '0');
-      -- txPll: bit 0, rxPll: bit 16
-      mgtControl( 0)        <= mgtIb.tx_rst;
-      mgtControl(16)        <= mgtIb.rx_rst;
-      -- control bits 1,17 set the MGT TX/RX polarity
+      mgtControl                             <= EVR_MGT_CONTROL_INIT_C;
+      mgtControl.rxReset                     <= mgtIb.rx_rst;
+      mgtControl.txReset                     <= mgtIb.tx_rst;
+      mgtControl.rxPolarityInvert            <= RX_POL_INVERT_G;
+      mgtControl.txPolarityInvert            <= TX_POL_INVERT_G;
+      mgtControl.rxCommaAlignDisable         <= '1';
+
    end process P_MGT_COMB;
 
 end architecture Impl;
