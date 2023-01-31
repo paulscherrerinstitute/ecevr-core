@@ -10,7 +10,6 @@ use work.EcEvrBspPkg.all;
 
 entity EcEvrBoardMap is
   port (
-    jumper8         : in  std_logic;
     sysClk          : in  std_logic;
     sysRst          : in  std_logic;
 
@@ -251,8 +250,8 @@ begin
       when HBI16M =>
 
         for i in lan9254_hbiOb.ad'range loop
-          fpga_o( HBI_MAP_C( i ) ) <= lan9254_hbiOb.ad(i)    and jumper8;
-          fpga_t( HBI_MAP_C( i ) ) <= lan9254_hbiOb.ad_t(0)  and jumper8;
+          fpga_o( HBI_MAP_C( i ) ) <= lan9254_hbiOb.ad(i);
+          fpga_t( HBI_MAP_C( i ) ) <= lan9254_hbiOb.ad_t(0);
         end loop;
 
         fpga_o(22)           <= lan9254_hbiOb.cs;
