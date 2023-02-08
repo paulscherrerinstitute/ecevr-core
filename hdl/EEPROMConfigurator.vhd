@@ -691,7 +691,8 @@ begin
 
    eepWriteAck        <= r.eepWrAck;
 
-   debug(31 downto 4) <= (others => '0');
+   debug(31 downto 5) <= (others => '0');
+   debug(          4) <= toSl( r.cfgFound );
    debug( 3 downto 0) <= std_logic_vector( to_unsigned( StateType'pos( r.state ), 4 ) );
 
    i2cStrmRxRdy  <= r.strmRxRdy;

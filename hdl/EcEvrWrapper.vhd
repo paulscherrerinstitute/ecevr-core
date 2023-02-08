@@ -710,7 +710,8 @@ begin
       i2cStrmTxRdy       => i2cStrmReqRdy(I2C_MST_CFG_C),
       i2cStrmLock        => i2cStrmLock  (I2C_MST_CFG_C),
 
-      retries            => configRetries
+      retries            => configRetries,
+      debug              => configDebug
     );
 
   U_I2C_PROG : entity work.I2cProgrammer
