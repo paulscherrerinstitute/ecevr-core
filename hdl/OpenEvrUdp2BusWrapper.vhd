@@ -203,11 +203,11 @@ begin
       mgtOb.rx_usr_clk                       <= evrRxClk;
       mgtOb.rx_data                          <= evrRxData;
       mgtOb.rx_charisk                       <= evrRxCharIsK;
-      mgtOb.rx_disperr                       <= mgtStatus.rxDispErr;
+      mgtOb.rx_disperr                       <= mgtStatus.rxDispError;
       mgtOb.rx_notintable                    <= mgtStatus.rxNotIntable;
 
       mgtOb.tx_usr_clk                       <= evrTxClk;
-      mgtOb.cpll_locked                      <= mgtStatus(1);
+      mgtOb.cpll_locked                      <= mgtStatus.rxPllLocked;
 
       evrTxData                              <= mgtIb.tx_data;
       evrTxCharIsK                           <= mgtIb.tx_charisk;
