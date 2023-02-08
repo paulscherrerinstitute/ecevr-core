@@ -44,7 +44,8 @@ entity EcEvrWrapper is
     NUM_BUS_SUBS_G    : natural        := 0;
     EVR_FLAVOR_G      : string         := "OPENEVR";
     RX_POL_INVERT_G   : std_logic      := '0';
-    TX_POL_INVERT_G   : std_logic      := '0'
+    TX_POL_INVERT_G   : std_logic      := '0';
+    I2C_CLK_PRG_ENA_G : std_logic      := '1'
   );
   port (
     sysClk            : in     std_logic;
@@ -740,7 +741,7 @@ begin
       i2cLock            => i2cStrmLock  (I2C_MST_PRG_C)
     );
 
-  i2cProgValid <= (i2cProgFound and i2cProgRun);
+  i2cProgValid <= (i2cProgFound and i2cProgRun and I2C_CLK_PRG_ENA_G);
 
   P_PRG_START : process ( sysClk ) is
   begin
