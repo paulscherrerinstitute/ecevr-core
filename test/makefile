@@ -1,12 +1,14 @@
-
 LAN9254_DIR=../../lan9254-rtl-esc/hdl
 EVR320_DIR=../../evr320/hdl
 PSI_COMMON_DIR=../../psi_common/hdl
-GHDL_DIR=/opt/ghdl/v2.0.0-gcc/
-UNISIM_DIR=$(GHDL_DIR)/vivado/2022.2
-GHDL=$(GHDL_DIR)/bin/ghdl
+
+GHDL=ghdl
 
 -include config.local.mk
+
+ifndef UNISIM_DIR
+$(error "please set UNISIM_DIR to point to ghdl build of unisim")
+endif
 
 LANSRCS+=ESCBasicTypesPkg.vhd
 LANSRCS+=Lan9254Pkg.vhd
