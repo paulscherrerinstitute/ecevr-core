@@ -2,8 +2,11 @@
 LAN9254_DIR=../../lan9254-rtl-esc/hdl
 EVR320_DIR=../../evr320/hdl
 PSI_COMMON_DIR=../../psi_common/hdl
-UNISIM_DIR=/opt/ghdl/v2.0.0-gcc/vivado-2021.2/
-GHDL=ghdl
+GHDL_DIR=/opt/ghdl/v2.0.0-gcc/
+UNISIM_DIR=$(GHDL_DIR)/vivado/2022.2
+GHDL=$(GHDL_DIR)/bin/ghdl
+
+-include config.local.mk
 
 LANSRCS+=ESCBasicTypesPkg.vhd
 LANSRCS+=Lan9254Pkg.vhd
@@ -17,32 +20,32 @@ LANSRCS+=Udp2BusPkg.vhd
 #LANSRCS+=EEPROMContentPkg.vhd
 
 SRCS = $(addprefix $(LAN9254_DIR)/,$(LANSRCS))
-SRCS+=EvrTxPDOPkg.vhd
+SRCS+=$(addprefix ../hdl/,EvrTxPDOPkg.vhd)
 SRCS+=$(addprefix $(PSI_COMMON_DIR)/,psi_common_array_pkg.vhd)
 SRCS+=$(addprefix $(PSI_COMMON_DIR)/,psi_common_math_pkg.vhd)
 SRCS+=$(addprefix $(PSI_COMMON_DIR)/,psi_common_logic_pkg.vhd)
 SRCS+=$(addprefix $(EVR320_DIR)/,evr320_pkg.vhd)
-SRCS+=Evr320ConfigPkg.vhd
-SRCS+=EEPROMConfigPkg.vhd
-SRCS+=EEPROMContentPkg.vhd
-SRCS+=FoE2SpiPkg.vhd
-SRCS+=EcEvrBspPkg.vhd
+SRCS+=$(addprefix ../hdl/,Evr320ConfigPkg.vhd)
+SRCS+=$(addprefix ../hdl/,EEPROMConfigPkg.vhd)
+SRCS+=$(addprefix ../hdl/,EEPROMContentPkg.vhd)
+SRCS+=$(addprefix ../hdl/,FoE2SpiPkg.vhd)
+SRCS+=$(addprefix ../hdl/,EcEvrBspPkg.vhd)
 SRCS+=$(addprefix $(PSI_COMMON_DIR)/,psi_common_bit_cc.vhd)
 SRCS+=$(addprefix $(PSI_COMMON_DIR)/,psi_common_i2c_master.vhd)
-SRCS+=PsiI2cStreamIF.vhd
-SRCS+=EEPROMConfigurator.vhd
-SRCS+=I2cEEPROM.vhd
+SRCS+=$(addprefix ../hdl/,PsiI2cStreamIF.vhd)
+SRCS+=$(addprefix ../hdl/,EEPROMConfigurator.vhd)
+SRCS+=$(addprefix ../hdl/,I2cEEPROM.vhd)
 SRCS+=EEPROMConfiguratorTb.vhd
-SRCS+=SpiBitShifter.vhd
-SRCS+=SpiMonitor.vhd
+SRCS+=$(addprefix ../hdl/,SpiBitShifter.vhd)
+SRCS+=$(addprefix ../hdl/,SpiMonitor.vhd)
 SRCS+=SpiBitShifterTb.vhd
-SRCS+=Bus2SpiFlashIF.vhd
-SRCS+=FoE2Spi.vhd
+SRCS+=$(addprefix ../hdl/,Bus2SpiFlashIF.vhd)
+SRCS+=$(addprefix ../hdl/,FoE2Spi.vhd)
 SRCS+=FoE2SpiTb.vhd
-SRCS+=IcapE2Reg.vhd
+SRCS+=$(addprefix ../hdl/,IcapE2Reg.vhd)
 SRCS+=IcapE2RegTb.vhd
 SRCS+=SpiMonitorTb.vhd
-SRCS+=EcEvrPulseGen.vhd
+SRCS+=$(addprefix ../hdl/,EcEvrPulseGen.vhd)
 SRCS+=EcEvrPulseGenTb.vhd
 
 TSTS=$(filter %Tb,$(patsubst %.vhd,%,$(SRCS)))
@@ -71,4 +74,4 @@ EEPROMContentPkg.vhd:
 .PHONY: ana clean build test $(addprefix run_,$(TSTS))
 
 clean:
-	$(RM) $(notdir $(SRCS:%.vhd=%.o)) work-obj93.cf $(TSTS) e~*.o dump.ghw
+	$(RM) $(notdir $(SRCS:%.vhd=%.o)) work-obj93.cf $(TSTS) e~*.o dump.ghw frame_data_e2_rbt_out.txt

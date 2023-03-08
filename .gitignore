@@ -1,4 +1,5 @@
 *.swp
-*.o
-work-obj*.cf
-e~*.lst
+test/*.o
+test/work-obj*.cf
+test/e~*.lst
+test/config.local.mk

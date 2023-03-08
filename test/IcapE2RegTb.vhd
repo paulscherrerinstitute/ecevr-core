@@ -3,6 +3,9 @@ use     ieee.std_logic_1164.all;
 use     ieee.numeric_std.all;
 use     ieee.math_real.all;
 
+library unisim;
+use     unisim.vcomponents.all;
+
 use     work.ESCBasicTypesPkg.all;
 use     work.Lan9254Pkg.all;
 use     work.ESCFoEPkg.all;
