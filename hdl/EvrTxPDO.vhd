@@ -185,6 +185,11 @@ architecture rtl of EvrTxPDO is
    signal hasLatch        : std_logic_vector(3 downto 0);
    signal ecArray         : Slv32Array(NUM_EVENT_DWORDS_G - 1 downto 0);
 
+   -- set KEEP to help writing CDC constraints
+   attribute KEEP         : string;
+   attribute KEEP        of ecArray : signal is "TRUE";
+   attribute KEEP        of tsArray : signal is "TRUE";
+
 begin
 
    assert EVENT_MAP_G'length = 0 or EVENT_MAP_G'length = 256 report "EVENT_MAP_G must have 0 or 256 elements" severity failure;
