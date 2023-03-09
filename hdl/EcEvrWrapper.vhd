@@ -106,6 +106,8 @@ entity EcEvrWrapper is
     timingRxData      : in     std_logic_vector(15 downto 0);
     timingRxDataK     : in     std_logic_vector( 1 downto 0);
     evrEventsAdj      : out    std_logic_vector( 3 downto 0);
+    -- pdoTrg is not strictly in the timingRecClk but the evrClk
+    -- domain; for openevr with DC this differs!
     pdoTrg            : out    std_logic;
 
     timingTxClk       : in     std_logic;
@@ -115,6 +117,8 @@ entity EcEvrWrapper is
 end entity EcEvrWrapper;
 
 architecture Impl of EcEvrWrapper is
+
+  attribute KEEP : string;
 
   component evr320_udp2bus_wrapper is
   generic(
@@ -287,6 +291,8 @@ architecture Impl of EcEvrWrapper is
   signal eepWriteAck    : EEPROMWriteWordAckType;
   signal dbufSegments   : MemXferArray(MAX_TXPDO_SEGMENTS_C - 1 downto 0);
   signal dbufLastAddr   : unsigned(15 downto 0);
+  -- help with CDC constraints; this is initially read from EEPROM and then held steady.
+  attribute KEEP       of dbufLastAddr : signal is "TRUE";
   signal configRetries  : unsigned( 3 downto 0);
   signal configRstR     : std_logic := '0';
   signal configRstRIn   : std_logic;
