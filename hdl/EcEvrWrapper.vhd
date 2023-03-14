@@ -108,6 +108,8 @@ entity EcEvrWrapper is
     evrEventsAdj      : out    std_logic_vector( 3 downto 0);
     -- pdoTrg is not strictly in the timingRecClk but the evrClk
     -- domain; for openevr with DC this differs!
+    eventClk          : out    std_logic;
+    eventRst          : out    std_logic;
     pdoTrg            : out    std_logic;
 
     timingTxClk       : in     std_logic;
@@ -380,8 +382,8 @@ architecture Impl of EcEvrWrapper is
   signal dbusStreamData  : std_logic_vector( 7 downto 0);
   signal dbusStreamValid : std_logic;
 
-  signal eventClk        : std_logic;
-  signal eventRst        : std_logic;
+  signal eventClkLoc     : std_logic;
+  signal eventRstLoc     : std_logic;
 
 begin
 
@@ -504,8 +506,8 @@ begin
 
   G_PSI_EVR : if ( EVR_FLAVOR_G = "PSI" ) generate
 
-    eventClk <= timingRecClk;
-    eventRst <= timingRecRst;
+    eventClkLoc <= timingRecClk;
+    eventRstLoc <= timingRecRst;
 
     U_EVR : component evr320_udp2bus_wrapper
       generic map (
@@ -586,8 +588,8 @@ begin
         mgtStatus          => timingMGTStatus,
         mgtControl         => timingMGTControl,
 
-        evrClk             => eventClk,
-        evrRst             => eventRst,
+        evrClk             => eventClkLoc,
+        evrRst             => eventRstLoc,
 
         evrEvent           => eventCode,
         evrEventVld        => eventCodeVld,
@@ -629,10 +631,10 @@ begin
     end loop;
   end process P_LATCH_IN;
 
-  P_LATCH : process ( eventClk ) is
+  P_LATCH : process ( eventClkLoc ) is
   begin
-    if ( rising_edge( eventClk ) ) then
-      if ( eventRst = '1' ) then
+    if ( rising_edge( eventClkLoc ) ) then
+      if ( eventRstLoc = '1' ) then
         latchedEvents <= (others => '0');
       else
         if ( ( not latchedEvents(0) and latch(0) ) = '1' ) then
@@ -663,8 +665,8 @@ begin
       TXPDO_ADDR_G       => unsigned(ESC_SM3_SMA_C)
     )
     port map (
-      evrClk             => eventClk,
-      evrRst             => eventRst,
+      evrClk             => eventClkLoc,
+      evrRst             => eventRstLoc,
 
       pdoTrg             => pdoTrgLoc,
       tsHi               => evrTimestampHi,
@@ -1015,5 +1017,8 @@ begin
   pdoTrg        <= pdoTrgLoc;
 
   eepEmulActive <= eepEmulActLoc;
+
+  eventClk      <= eventClkLoc;
+  eventRst      <= eventRstLoc;
 
 end architecture Impl;
