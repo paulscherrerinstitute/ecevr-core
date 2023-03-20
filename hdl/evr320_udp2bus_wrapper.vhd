@@ -75,7 +75,7 @@ entity evr320_udp2bus_wrapper is
     --usr_event_delay_i : in  typ_arr_delay; -- delay in recovery clock cycles event sos,0,1,2,3
     usr_events_adj_o : out std_logic_vector(3 downto 0); -- User defined event pulses adjusted in delay & length
     sos_events_adj_o : out std_logic;   -- Start-of-Sequence adjusted in delay & length
-    -- additional events to decode; unfortunatelye the register map of the evr320 and the
+    -- additional events to decode; unfortunately the register map of the evr320 and the
     -- associated data types are not easily extendable; therefore we provide an additional bank
     extra_events_o   : out std_logic_vector(g_EXTRA_RAW_EVTS - 1 downto 0);
     extra_events_en_o: out std_logic_vector(g_EXTRA_RAW_EVTS - 1 downto 0);

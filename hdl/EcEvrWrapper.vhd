@@ -198,7 +198,7 @@ architecture Impl of EcEvrWrapper is
 
   component OpenEvrUdp2BusWrapper is
     generic (
-      NUM_TRIGS_G        : natural   := 8;
+      SYS_CLK_FREQ_G     : real;
       RX_POL_INVERT_G    : std_logic := '0';
       TX_POL_INVERT_G    : std_logic := '0'
     );
@@ -235,8 +235,11 @@ architecture Impl of EcEvrWrapper is
       evrTimestampLo     : out std_logic_vector(31 downto 0);
       evrTimestampVld    : out std_logic;
 
-      evrTriggers        : out std_logic_vector(NUM_TRIGS_G - 1 downto 0);
-      evrTriggersEn      : out std_logic_vector(NUM_TRIGS_G - 1 downto 0);
+      evrPulsers         : out std_logic_vector(NUM_PULSE_EVENTS_C  - 1 downto 0);
+      evrPulsersEn       : out std_logic_vector(NUM_PULSE_EVENTS_C  - 1 downto 0);
+      evrXtraDec         : out std_logic_vector(NUM_EXTRA_EVENTS_C - 1 downto 0);
+      evrXtraDecEn       : out std_logic_vector(NUM_EXTRA_EVENTS_C - 1 downto 0);
+
 
       evrStreamVld       : out std_logic;
       evrStreamAddr      : out std_logic_vector(10 downto 0);
@@ -284,8 +287,6 @@ architecture Impl of EcEvrWrapper is
   constant I2C_MST_BUS_C            : natural :=  2;
 
   constant GEN_FOE_C                : boolean := (SPI_FILE_MAP_G'length > 0 );
-
-  constant NUM_TRIGGERS_C           : natural := 4 + NUM_EXTRA_EVENTS_C;
 
   signal configReq      : EEPROMConfigReqType;
   signal configAck      : EEPROMConfigAckType := EEPROM_CONFIG_ACK_ASSERT_C;
@@ -555,14 +556,11 @@ begin
 
   G_OPEN_EVR : if ( EVR_FLAVOR_G = "OPENEVR" ) generate
 
-    signal evrTriggers            : std_logic_vector(NUM_TRIGGERS_C - 1 downto 0);
-    signal evrTriggersEnabled     : std_logic_vector(NUM_TRIGGERS_C - 1 downto 0);
-
   begin
 
     U_OPEN_EVR : component OpenEvrUdp2BusWrapper
       generic map (
-        NUM_TRIGS_G        => NUM_TRIGGERS_C,
+        SYS_CLK_FREQ_G     => CLK_FREQ_G,
         RX_POL_INVERT_G    => RX_POL_INVERT_G,
         TX_POL_INVERT_G    => TX_POL_INVERT_G
       )
@@ -597,19 +595,15 @@ begin
         evrTimestampLo     => evrTimestampLo,
         evrTimestampVld    => open,
 
-        evrTriggers        => evrTriggers,
-        evrTriggersEn      => evrTriggersEnabled,
+        evrPulsers         => usr_events_adj,
+        evrPulsersEn       => usr_events_en,
+        evrXtraDec         => extra_events,
+        evrXtraDecEn       => extra_events_en,
 
         evrStreamVld       => dbusStreamValid,
         evrStreamAddr      => dbusStreamAddr,
         evrStreamData      => dbusStreamData
       );
-
-    usr_events_adj  <= evrTriggers( usr_events_adj'range );
-    extra_events    <= evrTriggers( evrTriggers'left downto usr_events_adj'length );
-
-    usr_events_en   <= evrTriggersEnabled( usr_events_en'range );
-    extra_events_en <= evrTriggersEnabled( evrTriggersEnabled'left downto usr_events_en'length );
   end generate G_OPEN_EVR;
 
   U_SYNC_EVR_STABLE : entity work.SynchronizerBit
