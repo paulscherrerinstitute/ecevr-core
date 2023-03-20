@@ -14,6 +14,7 @@ package Evr320ConfigPkg is
 
    constant PULSE_WIDTH_DEFAULT_C  : EvrDurationType := toEvrDuration( 20 );
 
+   constant NUM_PULSE_EVENTS_C     : natural := 4;
    constant NUM_EXTRA_EVENTS_C     : natural := 4;
 
    type Evr320PulseGenConfigType is record 
@@ -32,7 +33,7 @@ package Evr320ConfigPkg is
       pulseInvrt => '0'
    );
 
-   type Evr320PulseGenConfigArray is array (natural range 0 to 3) of Evr320PulseGenConfigType;
+   type Evr320PulseGenConfigArray is array (natural range 0 to NUM_PULSE_EVENTS_C - 1) of Evr320PulseGenConfigType;
 
    type Evr320ConfigReqType is record
       pulseGenParams : Evr320PulseGenConfigArray;
