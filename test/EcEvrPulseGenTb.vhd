@@ -57,22 +57,24 @@ begin
       tick;
       end loop;
       schParams(cfg, 0, 1);
-      vld <= '1';
       tick;
-      vld <= '0';
+      vld <= '1';
       assert pul = '0' report "pulse not zero (" & integer'image(stg) & ")" severity failure; stg := stg + 1;
       tick;
-
+      vld <= '0';
+      tick;
       assert pul = '1' report "pulse zero (" & integer'image(stg) & ")" severity failure; stg := stg + 1;
       tick;
       assert pul = '0' report "pulse not zero (" & integer'image(stg) & ")" severity failure; stg := stg + 1;
 
       tick;
       schParams(cfg, 1, 2);
-      vld <= '1';
       tick;
+      vld <= '1';
       assert pul = '0' report "pulse not zero (" & integer'image(stg) & ")" severity failure; stg := stg + 1;
+      tick;
       vld <= '0';
+      assert pul = '0' report "pulse not zero (" & integer'image(stg) & ")" severity failure; stg := stg + 1;
       tick;
       assert pul = '0' report "pulse not zero (" & integer'image(stg) & ")" severity failure; stg := stg + 1;
       tick;

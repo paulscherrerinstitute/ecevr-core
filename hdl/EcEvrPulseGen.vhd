@@ -30,13 +30,19 @@ architecture Impl of EcEvrPulseGen is
    attribute IOB          : string;
 
    type RegType is record
-      pDly : unsigned(config.pulseDelay'left + 1 downto 0);
-      pWid : unsigned(config.pulseWidth'left + 1 downto 0);
+      cDly : signed(config.pulseDelay'left + 1 downto 0);
+      cWid : signed(config.pulseWidth'left + 1 downto 0);
+      pDly : signed(config.pulseDelay'left + 1 downto 0);
+      pWid : signed(config.pulseWidth'left + 1 downto 0);
+      code : std_logic_vector(7 downto 0);
    end record RegType;
 
    constant REG_INIT_C : RegType := (
-      pDly => (others => '0'),
-      pWid => (others => '0')
+      cDly => (others => '1'),
+      cWid => (others => '1'),
+      pDly => (others => '1'),
+      pWid => (others => '1'),
+      code => (others => '0')
    );
 
    signal r              : RegType := REG_INIT_C;
@@ -55,31 +61,42 @@ begin
       variable prevWid : unsigned(r.pWid'range);
    begin
       v := r;
+
+      -- register config
+      v.cDly := signed( '0' & config.pulseDelay ) - 1;
+      v.cWid := signed( '0' & config.pulseWidth ) - 1;
+      v.code := config.pulseEvent;
+      if ( ( config.pulseEnbld = '0' ) or ( config.pulseEvent = x"00" ) ) then
+         v.cWid := (others => '1');
+      end if;
+
+      -- counters
+      if ( r.pDly( r.pDly'left ) = '0' ) then
+         v.pDly := r.pDly - 2;
+      end if;
+
+      if ( r.pWid( r.pWid'left ) = '0' ) then
+         v.pWid := r.pWid - 1;
+      end if;
+
+      if ( ( v.pDly( v.pDly'left ) = '1' ) and ( r.pDly( r.pDly'left ) = '0' ) ) then
+         v.pWid := r.cWid;
+      end if;
+
       -- event starts a new pulse (if enabled)
-      if ( ( ( config.pulseEnbld and event_vld ) = '1' ) and ( event_code = config.pulseEvent ) ) then
+      if ( ( ( not r.cWid( r.cWid'left ) and event_vld ) = '1' ) and ( event_code = r.code ) ) then
          -- make sure current pulse is aborted
-         v.pWid(v.pWid'left) := '0';
+         v.pWid := (others => '1');
          -- load new delay
-         prevDly             := unsigned( '1' & config.pulseDelay );
-      else
-         prevDly             := r.pDly;
+         v.pDly := r.cDly;
+         if ( r.cDly( r.cDly'left ) = '1' ) then
+            -- no delay; start width immediately
+            v.pWid := r.cWid;
+         end if;
       end if;
-      -- compute next delay counter
-      if ( prevDly(prevDly'left) = '1' ) then
-         v.pDly := prevDly - 1;
-      end if;
-      -- if next delay is expired then load the pulse width counter
-      if ( (v.pDly(v.pDly'left) = '0') and (prevDly(prevDly'left) = '1') ) then
-         prevWid             := unsigned( '1' & config.pulseWidth );
-      else
-         prevWid             := r.pWid;
-      end if;
-      -- compute next pulse width
-      if ( prevWid(prevWid'left) = '1' ) then
-         v.pWid := prevWid - 1;
-      end if;
+
       -- gate output and register (
-      pin <= (v.pWid(v.pWid'left) and config.pulseEnbld) xor config.pulseInvrt;
+      pin <= (not v.pWid(v.pWid'left) and config.pulseEnbld) xor config.pulseInvrt;
       rin <= v;
    end process P_COMB;
 
