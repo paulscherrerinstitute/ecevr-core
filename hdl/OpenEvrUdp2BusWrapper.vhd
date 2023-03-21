@@ -233,13 +233,18 @@ begin
       mgtIb ) is
    begin
       mgtOb                                  <= EVR_TRANSCEIVER_OB_INIT_C;
+      -- don't use DRP based delay adjustment
+      -- DRP is not connected and we should/could use the PIPPM port on the GTP
+      mgtOb.dly_adj                          <= NONE; -- PIPPM not implemented yet in evr_dc
       mgtOb.rx_usr_clk                       <= evrRxClk;
       mgtOb.rx_data                          <= evrRxData;
       mgtOb.rx_charisk                       <= evrRxCharIsK;
       mgtOb.rx_disperr                       <= mgtStatus.rxDispError;
       mgtOb.rx_notintable                    <= mgtStatus.rxNotIntable;
+      mgtOb.rx_resetdone                     <= mgtStatus.rxResetDone;
 
       mgtOb.tx_usr_clk                       <= evrTxClk;
+      mgtOb.tx_bufstatus                     <= mgtStatus.txBufStatus;
       mgtOb.cpll_locked                      <= mgtStatus.rxPllLocked;
 
       evrTxData                              <= mgtIb.tx_data;
