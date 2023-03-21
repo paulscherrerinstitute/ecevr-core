@@ -114,7 +114,9 @@ entity EcEvrWrapper is
 
     timingTxClk       : in     std_logic;
     timingTxData      : out    std_logic_vector(15 downto 0) := (others => '0');
-    timingTxDataK     : out    std_logic_vector( 1 downto 0) := (others => '0')
+    timingTxDataK     : out    std_logic_vector( 1 downto 0) := (others => '0');
+
+    timingMMCMLocked  : out    std_logic := '0'
   );
 end entity EcEvrWrapper;
 
@@ -243,7 +245,9 @@ architecture Impl of EcEvrWrapper is
 
       evrStreamVld       : out std_logic;
       evrStreamAddr      : out std_logic_vector(10 downto 0);
-      evrStreamData      : out std_logic_vector( 7 downto 0)
+      evrStreamData      : out std_logic_vector( 7 downto 0);
+
+      mmcm_locked        : out std_logic
     );
   end component OpenEvrUdp2BusWrapper;
 
@@ -602,7 +606,8 @@ begin
 
         evrStreamVld       => dbusStreamValid,
         evrStreamAddr      => dbusStreamAddr,
-        evrStreamData      => dbusStreamData
+        evrStreamData      => dbusStreamData,
+        mmcm_locked        => timingMMCMLocked
       );
   end generate G_OPEN_EVR;
 
@@ -736,7 +741,7 @@ begin
       don                => i2cProgDone,
       err                => i2cProgErr,
       ack                => i2cProgAck,
-      
+
       i2cReq             => i2cStrmReqMst(I2C_MST_PRG_C),
       i2cReqRdy          => i2cStrmReqRdy(I2C_MST_PRG_C),
       i2cRep             => i2cStrmRepMst(I2C_MST_PRG_C),
@@ -855,7 +860,6 @@ begin
       spiMstLoc.util                 <= (others => '0');
       spiMstLoc.util(progress'range) <= progress;
     end process P_MISC;
-   
 
     GEN_ILA : if ( GEN_FOE_ILA_G ) generate
       signal probe2 : std_logic_vector(63 downto 0);
