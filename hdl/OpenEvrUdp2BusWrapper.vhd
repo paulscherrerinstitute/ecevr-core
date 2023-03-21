@@ -55,7 +55,9 @@ entity OpenEvrUdp2BusWrapper is
 
       evrStreamVld       : out std_logic;
       evrStreamAddr      : out std_logic_vector(10 downto 0);
-      evrStreamData      : out std_logic_vector( 7 downto 0)
+      evrStreamData      : out std_logic_vector( 7 downto 0);
+
+      mmcm_locked        : out std_logic
    );
    
 end entity OpenEvrUdp2BusWrapper;
@@ -180,7 +182,9 @@ begin
          delay_comp_locked_out => dcLocked,
 
          transceiverOb         => mgtOb,
-         transceiverIb         => mgtIb
+         transceiverIb         => mgtIb,
+
+         mmcm_locked           => mmcm_locked
       );
 
    U_DBUF_RX : entity work.databuf_rx_dc
