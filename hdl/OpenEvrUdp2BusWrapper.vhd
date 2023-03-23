@@ -8,6 +8,7 @@ use work.Udp2BusPkg.all;
 use work.Evr320ConfigPkg.all;
 use work.transceiver_pkg.all;
 use work.EcEvrBspPkg.all;
+use work.IlaWrappersPkg.all;
 
 entity OpenEvrUdp2BusWrapper is
    generic (
@@ -59,7 +60,7 @@ entity OpenEvrUdp2BusWrapper is
 
       mmcm_locked        : out std_logic
    );
-   
+
 end entity OpenEvrUdp2BusWrapper;
 
 architecture Impl of OpenEvrUdp2BusWrapper is
@@ -86,12 +87,15 @@ architecture Impl of OpenEvrUdp2BusWrapper is
    signal evrTxClkLoc           : std_logic;
    signal evrTxRstLoc           : std_logic;
 
+   signal dcMode                : std_logic := DC_MODE_DIS_C;
    signal dcUpdate              : std_logic := '0';
    signal dcValue               : std_logic_vector(31 downto 0) := (others => '0');
    signal dcStatus              : std_logic_vector(31 downto 0) := (others => '0');
    signal dcTopo                : std_logic_vector(31 downto 0) := (others => '0');
    signal dcTarget              : std_logic_vector(31 downto 0) := (others => '0');
    signal dcLocked              : std_logic := '0';
+   signal dcMeasInp             : std_logic_vector(31 downto 0);
+   signal dcMeas                : std_logic_vector(31 downto 0);
 
    signal linkOkLoc             : std_logic;
 
@@ -114,6 +118,11 @@ architecture Impl of OpenEvrUdp2BusWrapper is
    signal busRepEvr             : Udp2BusRepType := UDP2BUSREP_INIT_C;
 
    signal statusReg             : std_logic_vector(31 downto 0) := (others => '0');
+
+   signal evrStreamVldLoc       : std_logic;
+   signal evrStreamAddrLoc      : std_logic_vector(10 downto 0);
+   signal evrStreamDataLoc      : std_logic_vector( 7 downto 0);
+
 
    attribute KEEP               : string;
 
@@ -163,7 +172,8 @@ begin
          refclk_out            => evrTxClkLoc,
          refclk_rst            => evrTxRstLoc,
 
-         dc_mode               => DC_MODE_DIS_C,
+         dc_mode               => dcMode,
+         delay_meas_value      => dcMeasInp,
 
          -- flags (refclk domain)
          rx_link_ok            => linkOkLoc,
@@ -207,9 +217,9 @@ begin
          -- Databuf outbound stream interface;
          -- someone may be interested in picking out snippets of
          -- the databuf as it is streamed into the memory
-         databuf_strm_data     => evrStreamData,
-         databuf_strm_addr     => evrStreamAddr,
-         databuf_strm_vld      => evrStreamVld,
+         databuf_strm_data     => evrStreamDataLoc,
+         databuf_strm_addr     => evrStreamAddrLoc,
+         databuf_strm_vld      => evrStreamVldLoc,
 
          delay_comp_update     => dcUpdate,
          delay_comp_rx         => dcValue,
@@ -227,6 +237,37 @@ begin
          clear_flag            => Z128_c,
          reset                 => eventRstLoc
       );
+
+   G_DBUF_ILA : if ( true ) generate
+   begin
+
+      U_ILA : Ila_256
+         port map (
+            clk                  => eventClkLoc,
+            probe0(10 downto  0) => evrStreamAddrLoc,
+            probe0(11          ) => evrStreamVldLoc,
+            probe0(19 downto 12) => evrStreamDataLoc,
+            probe0(27 downto 20) => dbufData,
+            probe0(28          ) => dbufIsK,
+            probe0(29          ) => dbufVld,
+            probe0(63 downto 30) => (others => '0'),
+
+            probe1( 8 downto  0) => bufmemDWAddr,
+            probe1( 9          ) => busReqEvr.dwaddr(9),
+            probe1(10          ) => busReqEvr.valid,
+            probe1(11          ) => busReqEvr.rdnwr,
+            probe1(12          ) => busRepEvr.valid,
+            probe1(13          ) => busRepEvr.berr,
+            probe1(31 downto 14) => (others => '0'),
+            probe1(63 downto 32) => bufmemData,
+
+            probe2(31 downto  0) => busRepEvr.rdata,
+            probe2(63 downto 32) => busReqEvr.data,
+
+            probe3               => (others => '0')
+         );
+
+   end generate G_DBUF_ILA;
 
    P_MGT_COMB : process (
       evrRxClk,
@@ -279,7 +320,7 @@ begin
 
    P_HZ_SYNC_EVT : entity work.SynchronizerBit
       generic map (
-         WIDTH_G   => 8
+         WIDTH_G   => 9
       )
       port map (
          clk                => eventClkLoc,
@@ -290,11 +331,14 @@ begin
          datInp(5 downto 4) => mgtStatus.rxNotIntable,
          datInp(6)          => mgtStatus.rxPllLocked,
          datInp(7)          => linkOkLoc,
+         datInp(8)          => dcLocked,
 
          datOut(0)          => hzTglEvr,
          datOut(1)          => cfgReqEvr,
-         datOut(7 downto 2) => statusReg(5 downto 0)
+         datOut(8 downto 2) => statusReg(6 downto 0)
       );
+
+   statusReg(24)            <= dcMode;
 
    P_FREQ_EVR : process ( eventClkLoc ) is
    begin
@@ -311,11 +355,25 @@ begin
 
    B_REG : block is
 
+      procedure wr32(
+         variable v : inout std_logic_vector(31 downto 0);
+         constant q : in    Udp2BusReqType
+      ) is
+      begin
+         v := v;
+         for i in q.be'range loop
+            if ( q.be(i) = '1' ) then
+               v(8*i + 7 downto 8*i) := q.data(8*i + 7 downto 8*i);
+            end if;
+         end loop;
+      end procedure wr32;
+
       type RegType is record
          cfgAckTgl : std_logic;
          cfgReqLst : std_logic;
          ramVld    : std_logic;
-         busReq    : Udp2BusReqType;
+         dcTarget  : std_logic_vector(31 downto 0);
+         dcMode    : std_logic;
          pulseGens : Evr320ConfigReqType;
       end record RegType;
 
@@ -323,7 +381,8 @@ begin
          cfgAckTgl => '0',
          cfgReqLst => '0',
          ramVld    => '0',
-         busReq    => UDP2BUSREQ_INIT_C,
+         dcMode    => '0',
+         dcTarget  => (others => '0'),
          pulseGens => EVR320_CONFIG_REQ_INIT_C
       );
 
@@ -335,6 +394,28 @@ begin
 
    begin
 
+      P_SYNC_TXCLK_2_EVTCLK : entity work.SynchronizerVec
+         generic map (
+            W_A2B_G => dcMeasInp'length
+         )
+         port map (
+            clkA    => evrTxClkLoc,
+            dinA    => dcMeasInp,
+            clkB    => eventClkLoc,
+            douB    => dcMeas
+         );
+
+      P_SYNC_EVTCLK_2_SYSCLK : entity work.SynchronizerVec
+         generic map (
+            W_A2B_G => dcTarget'length
+         )
+         port map (
+            clkA    => eventClkLoc,
+            dinA    => r.dcTarget,
+            clkB    => sysClk,
+            douB    => dcTarget
+         );
+
       P_SYNC_ACK : entity work.SynchronizerBit
          port map (
             clk       => sysClk,
@@ -343,7 +424,19 @@ begin
             datOut(0) => cfgAckOut
          );
 
-      P_COMB : process ( r, cfgReqEvr, cfgReqLoc, busReqEvr, bufmemData, statusReg, evrFreq ) is
+      P_COMB : process (
+         r,
+         cfgReqEvr, cfgReqLoc,
+         busReqEvr,
+         bufmemData,
+         statusReg,
+         evrFreq,
+         dcMeas,
+         dcValue,
+         dcStatus,
+         dcTarget,
+         dcTopo
+       ) is
          variable v      : RegType;
          variable rep    : Udp2BusRepType;
       begin
@@ -351,16 +444,14 @@ begin
          v.cfgReqLst     := cfgReqEvr;
          v.ramVld        := '0';
 
-         v.busReq        := busReqEvr;
-
          rep             := UDP2BUSREP_INIT_C;
          rep.berr        := '1';
-         rep.valid       := r.busReq.valid;
+         rep.valid       := busReqEvr.valid;
          rep.rdata       := bufmemData;
 
-         bufmemDWAddr    <= r.busReq.dwaddr(8 downto 0);
+         bufmemDWAddr    <= busReqEvr.dwaddr(8 downto 0);
 
-         if ( ( r.busReq.valid and r.busReq.rdnwr and r.busReq.dwaddr(9)) = '1' ) then
+         if ( ( busReqEvr.valid and busReqEvr.rdnwr and busReqEvr.dwaddr(9) ) = '1' ) then
             -- RAM read; this has 1 cycle latency
             if ( r.ramVld = '0' ) then
                v.ramVld        := '1';
@@ -369,47 +460,73 @@ begin
             rep.berr           := '0';
          end if;
 
-         if ( ( r.busReq.valid and not r.busReq.dwaddr(9) ) = '1' ) then
-            case ( r.busReq.dwaddr(8 downto 7) ) is
+         if ( ( busReqEvr.valid and not busReqEvr.dwaddr(9) ) = '1' ) then
+            case ( busReqEvr.dwaddr(8 downto 7) ) is
                when "00"   =>
-                  if ( r.busReq.rdnwr = '1' ) then
+                  if ( busReqEvr.rdnwr = '1' ) then
                      rep.berr := '0';
-                     case ( r.busReq.dwaddr(6 downto 0) ) is
+                     case ( busReqEvr.dwaddr(6 downto 0) ) is
                         when "0000000" =>
                            rep.rdata := statusReg;
                         when "0000001" =>
                            rep.rdata := std_logic_vector( evrFreq );
+                        when "0000010" =>
+                           rep.rdata := dcMeas;
+                        when "0000011" =>
+                           rep.rdata := dcValue;
+                        when "0000100" =>
+                           rep.rdata := dcStatus;
+                        when "0000101" =>
+                           rep.rdata := dcTopo;
+                        when "0000110" =>
+                           rep.rdata := r.dcTarget;
+                        when others =>
+                           rep.berr  := '1';
+                     end case;
+                  else
+                     rep.berr := '0';
+                     case ( busReqEvr.dwaddr(6 downto 0) ) is
+                        when "0000000" =>
+                           if ( busReqEvr.be(3) = '1' ) then
+                              v.dcMode := busReqEvr.data(24);
+                           end if;
+                        when "0000110" =>
+                           wr32( v.dcTarget, busReqEvr );
                         when others =>
                            rep.berr  := '1';
                      end case;
                   end if;
                when "01"   =>
                   for i in r.pulseGens.pulseGenParams'range loop
-                     if ( to_integer( unsigned( r.busReq.dwaddr(6 downto 2) ) ) = i - r.pulseGens.pulseGenParams'low ) then
+                     if ( to_integer( unsigned( busReqEvr.dwaddr(6 downto 2) ) ) = i - r.pulseGens.pulseGenParams'low ) then
                         rep.berr := '0';
-                        case r.busReq.dwaddr(1 downto 0) is
+                        case busReqEvr.dwaddr(1 downto 0) is
                            when "00" =>
-                              if ( r.busReq.rdnwr = '1' ) then
+                              if ( busReqEvr.rdnwr = '1' ) then
                                  rep.rdata             := r.pulseGens.pulseGenParams(i).pulseWidth;
                               else
-                                 v.pulseGens.pulseGenParams(i).pulseWidth := r.busReq.data;
+                                 wr32( v.pulseGens.pulseGenParams(i).pulseWidth, busReqEvr);
                               end if;
                            when "01" =>
-                              if ( r.busReq.rdnwr = '1' ) then
+                              if ( busReqEvr.rdnwr = '1' ) then
                                  rep.rdata             := r.pulseGens.pulseGenParams(i).pulseDelay;
                               else
-                                 v.pulseGens.pulseGenParams(i).pulseDelay := r.busReq.data;
+                                 wr32( v.pulseGens.pulseGenParams(i).pulseDelay, busReqEvr);
                               end if;
                            when "10" =>
-                              if ( r.busReq.rdnwr = '1' ) then
+                              if ( busReqEvr.rdnwr = '1' ) then
                                  rep.rdata             := (others => '0');
                                  rep.rdata(7 downto 0) := r.pulseGens.pulseGenParams(i).pulseEvent;
                                  rep.rdata(31)         := r.pulseGens.pulseGenParams(i).pulseEnbld;
                                  rep.rdata(30)         := r.pulseGens.pulseGenParams(i).pulseInvrt;
                               else
-                                 v.pulseGens.pulseGenParams(i).pulseEvent := r.busReq.data(7 downto 0);
-                                 v.pulseGens.pulseGenParams(i).pulseEnbld := r.busReq.data(31);
-                                 v.pulseGens.pulseGenParams(i).pulseInvrt := r.busReq.data(30);
+                                 if ( busReqEvr.be(0) = '1' ) then
+                                    v.pulseGens.pulseGenParams(i).pulseEvent := busReqEvr.data(7 downto 0);
+                                 end if;
+                                 if ( busReqEvr.be(3) = '1' ) then
+                                    v.pulseGens.pulseGenParams(i).pulseEnbld := busReqEvr.data(31);
+                                    v.pulseGens.pulseGenParams(i).pulseInvrt := busReqEvr.data(30);
+                                 end if;
                               end if;
                            when others =>
                               rep.berr := '1';
@@ -418,30 +535,32 @@ begin
                   end loop;
                when "10"   =>
                   for i in r.pulseGens.extraEvents'range loop
-                     if ( to_integer( unsigned( r.busReq.dwaddr(6 downto 2) ) ) = i - r.pulseGens.extraEvents'low ) then
+                     if ( to_integer( unsigned( busReqEvr.dwaddr(6 downto 2) ) ) = i - r.pulseGens.extraEvents'low ) then
                         rep.berr := '0';
-                        case r.busReq.dwaddr(1 downto 0) is
+                        case busReqEvr.dwaddr(1 downto 0) is
                            when "00" =>
-                              if ( r.busReq.rdnwr = '1' ) then
+                              if ( busReqEvr.rdnwr = '1' ) then
                                  rep.rdata             := x"0000_0001";
                               else
                                  rep.berr              := '1';
                               end if;
                            when "01" =>
-                              if ( r.busReq.rdnwr = '1' ) then
+                              if ( busReqEvr.rdnwr = '1' ) then
                                  rep.rdata             := x"0000_0000";
                               else
                                  rep.berr              := '1';
                               end if;
                            when "10" =>
-                              if ( r.busReq.rdnwr = '1' ) then
+                              if ( busReqEvr.rdnwr = '1' ) then
                                  rep.rdata             := (others => '0');
                                  rep.rdata(7 downto 0) := r.pulseGens.extraEvents(i);
                                  if ( r.pulseGens.extraEvents(i) /= x"00" ) then
                                     rep.rdata(31)      := '1';
                                  end if;
                               else
-                                 v.pulseGens.extraEvents(i) := r.busReq.data(7 downto 0);
+                                 if ( busReqEvr.be(0) = '1' ) then
+                                    v.pulseGens.extraEvents(i) := busReqEvr.data(7 downto 0);
+                                 end if;
                               end if;
                            when others =>
                               rep.berr                 := '1';
@@ -461,12 +580,9 @@ begin
 
          v.pulseGens.req  := '0'; -- unused; should be optimized away
 
-         if ( ( rep.valid and r.busReq.valid ) = '1' ) then
-            v.busReq.valid := '0';
-         end if;
-
          busRepEvr        <= rep;
          rin              <= v;
+         dcMode           <= r.dcMode;
 
       end process P_COMB;
 
@@ -483,7 +599,7 @@ begin
       begin
          if ( rising_edge( eventClkLoc ) ) then
             r <= rin;
-         end if; 
+         end if;
       end process P_REGS;
 
       G_PULSEGEN : for i in r.pulseGens.pulseGenParams'range generate
@@ -536,6 +652,10 @@ begin
 
    end block B_REG;
 
-   evrRxLinkOk <= linkOkLoc;
+   evrRxLinkOk        <= linkOkLoc;
+
+   evrStreamAddr      <= evrStreamAddrLoc;
+   evrStreamVld       <= evrStreamVldLoc;
+   evrStreamData      <= evrStreamDataLoc;
 
 end architecture Impl;
