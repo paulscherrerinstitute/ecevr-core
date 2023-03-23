@@ -383,9 +383,9 @@ architecture Impl of EcEvrWrapper is
   signal pdoTrgLoc       : std_logic;
   signal dbufReceived    : std_logic;
 
-  signal dbusStreamAddr  : std_logic_vector(10 downto 0);
-  signal dbusStreamData  : std_logic_vector( 7 downto 0);
-  signal dbusStreamValid : std_logic;
+  signal dbufStreamAddr  : std_logic_vector(10 downto 0);
+  signal dbufStreamData  : std_logic_vector( 7 downto 0);
+  signal dbufStreamValid : std_logic;
 
   signal eventClkLoc     : std_logic;
   signal eventRstLoc     : std_logic;
@@ -548,9 +548,9 @@ begin
         timestamp_hi_o    => evrTimestampHi,
         timestamp_lo_o    => evrTimestampLo,
 
-        stream_valid_o    => dbusStreamValid,
-        stream_addr_o     => dbusStreamAddr,
-        stream_data_o     => dbusStreamData,
+        stream_valid_o    => dbufStreamValid,
+        stream_addr_o     => dbufStreamAddr,
+        stream_data_o     => dbufStreamData,
 
         evr_rx_data       => timingRxData,
         evr_rx_charisk    => timingRxDataK,
@@ -604,9 +604,9 @@ begin
         evrXtraDec         => extra_events,
         evrXtraDecEn       => extra_events_en,
 
-        evrStreamVld       => dbusStreamValid,
-        evrStreamAddr      => dbusStreamAddr,
-        evrStreamData      => dbusStreamData,
+        evrStreamVld       => dbufStreamValid,
+        evrStreamAddr      => dbufStreamAddr,
+        evrStreamData      => dbufStreamData,
         mmcm_locked        => timingMMCMLocked
       );
   end generate G_OPEN_EVR;
@@ -988,10 +988,10 @@ begin
     bus2SubRep(BUS_2IDX_LOC_C).rdata <= v;
   end process P_DIAG;
 
-  P_DBUF_RECEIVED : process ( dbusStreamValid, dbusStreamAddr, dbufLastAddr ) is
+  P_DBUF_RECEIVED : process ( dbufStreamValid, dbufStreamAddr, dbufLastAddr ) is
   begin
     dbufReceived <= '0';
-    if ( ( dbusStreamValid = '1' ) and ( unsigned(dbusStreamAddr) = dbufLastAddr ) ) then
+    if ( ( dbufStreamValid = '1' ) and ( unsigned(dbufStreamAddr) = dbufLastAddr ) ) then
       dbufReceived <= '1';
     end if;
   end process P_DBUF_RECEIVED;
