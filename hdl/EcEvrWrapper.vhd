@@ -254,9 +254,19 @@ architecture Impl of EcEvrWrapper is
   constant NUM_BUS_MSTS_C           : natural := 1;
   constant BUS_MIDX_PDO_C           : natural := 0;
 
-  constant MEM_OFFSET_C             : unsigned(31 downto 0) := x"0000_0080";
+  function MEM_OFFSET_F return unsigned is
+     variable v : unsigned(31 downto 0) := (others => 'X');
+  begin
+     if    ( EVR_FLAVOR_G = "OPENEVR" ) then
+        v := x"0000_0800";
+     elsif ( EVR_FLAVOR_G = "PSI" ) then
+        v := x"0000_0080";
+     end if;
+     return v;
+  end function MEM_OFFSET_F;
+
   constant EVR_BASE_ADDR_C          : unsigned(31 downto 0) := x"0000_0000";
-  constant MEM_BASE_ADDR_C          : unsigned(31 downto 0) := EVR_BASE_ADDR_C + MEM_OFFSET_C;
+  constant MEM_BASE_ADDR_C          : unsigned(31 downto 0) := EVR_BASE_ADDR_C + MEM_OFFSET_F;
 
   -- local 1st tier subordinates
   constant NUM_LOC_SUBS_C           : natural := 3;
