@@ -72,7 +72,7 @@ begin
 
       -- counters
       if ( r.pDly( r.pDly'left ) = '0' ) then
-         v.pDly := r.pDly - 2;
+         v.pDly := r.pDly - 1;
       end if;
 
       if ( r.pWid( r.pWid'left ) = '0' ) then
