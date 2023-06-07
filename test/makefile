@@ -19,6 +19,7 @@ LANSRCS+=ESCMbxPkg.vhd
 LANSRCS+=ESCFoEPkg.vhd
 LANSRCS+=MicroUDPPkg.vhd
 LANSRCS+=Udp2BusPkg.vhd
+LANSRCS+=SynchronizerBit.vhd
 #LANSRCS+=EEPROMContentPkg.vhd
 
 SRCS = $(addprefix $(LAN9254_DIR)/,$(LANSRCS))
@@ -49,6 +50,8 @@ SRCS+=IcapE2RegTb.vhd
 SRCS+=SpiMonitorTb.vhd
 SRCS+=$(addprefix ../hdl/,EcEvrPulseGen.vhd)
 SRCS+=EcEvrPulseGenTb.vhd
+SRCS+=$(addprefix ../hdl/,ClockMeasure.vhd)
+SRCS+=ClockMeasureTb.vhd
 
 TSTS=$(filter %Tb,$(patsubst %.vhd,%,$(SRCS)))
 
