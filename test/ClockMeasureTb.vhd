@@ -67,7 +67,7 @@ begin
  
   U_DUT : entity work.ClockMeasure
      generic map (
-        REF_FREQUENCY_G   => REF_FREQ_C,
+        REF_FREQ_HZ_G     => REF_FREQ_C,
         MEAS_FREQ_WIDTH_G => MAXW_C
      )
      port map (

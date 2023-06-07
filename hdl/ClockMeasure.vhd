@@ -7,7 +7,7 @@ use ieee.math_real.all;
 
 entity ClockMeasure is
    generic (
-      REF_FREQUENCY_G       : real;
+      REF_FREQ_HZ_G         : real;
       -- max. supported frequency is 2**MEAS_FREQ_WIDTH_G - 1
       MEAS_FREQ_WIDTH_G     : natural
    );
@@ -45,15 +45,15 @@ architecture rtl of ClockMeasure is
       variable v : real;
       variable n : natural;
    begin
-      return BITS_F( MAX_FREQ_C / (REF_FREQUENCY_G / 2.0) );
+      return BITS_F( MAX_FREQ_C / (REF_FREQ_HZ_G / 2.0) );
    end function PRESC_BITS_F;
 
    constant PRESC_BITS_C    : natural := PRESC_BITS_F;
 
-   subtype  TimerType       is unsigned(BITS_F(REF_FREQUENCY_G) + PRESC_BITS_C + 1 - 1 downto 0);
+   subtype  TimerType       is unsigned(BITS_F(REF_FREQ_HZ_G) + PRESC_BITS_C + 1 - 1 downto 0);
 
-   constant TIME_HR_C       : TimerType := to_unsigned( natural(REF_FREQUENCY_G) * 2**PRESC_BITS_C, TimerType'length );
-   constant TIME_LR_C       : TimerType := to_unsigned( natural(REF_FREQUENCY_G)                  , TimerType'length );
+   constant TIME_HR_C       : TimerType := to_unsigned( natural(REF_FREQ_HZ_G) * 2**PRESC_BITS_C, TimerType'length );
+   constant TIME_LR_C       : TimerType := to_unsigned( natural(REF_FREQ_HZ_G)                  , TimerType'length );
 
    -- extra bit holds toggle state
    signal prescaler         : unsigned(PRESC_BITS_C downto 0)          := (others => '0');
