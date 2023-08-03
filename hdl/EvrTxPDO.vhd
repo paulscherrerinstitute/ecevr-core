@@ -58,6 +58,7 @@ architecture rtl of EvrTxPDO is
       tsHi                : std_logic_vector(31 downto 0);
       tsLo                : std_logic_vector(31 downto 0);
       pdoTrg              : std_logic;
+      pdoTgl              : std_logic;
    end record EvrRegType;
 
    constant EVR_REG_INIT_C: EvrRegType := (
@@ -65,7 +66,8 @@ architecture rtl of EvrTxPDO is
       eventCodes          => (others => '0'),
       tsHi                => (others => '0'),
       tsLo                => (others => '0'),
-      pdoTrg              => '0'
+      pdoTrg              => '0',
+      pdoTgl              => '0'
    );
 
    procedure mapEvent(
@@ -92,7 +94,7 @@ architecture rtl of EvrTxPDO is
       lanReq              : Lan9254ReqType;
       busReq              : Udp2BusReqType;
       pdoDwAddr           : unsigned(11 downto 0);
-      pdoTrg              : std_logic;
+      pdoTgl              : std_logic;
       count               : unsigned(3 downto 0);
       xferIdx             : natural range 0 to MAX_MEM_XFERS_G;
       trgCnt              : unsigned(15 downto 0);
@@ -106,7 +108,7 @@ architecture rtl of EvrTxPDO is
       lanReq              => LAN9254REQ_INIT_C,
       busReq              => UDP2BUSREQ_INIT_C,
       pdoDwAddr           => (others => '0'),
-      pdoTrg              => '0',
+      pdoTgl              => '0',
       count               => COUNT_ZERO_C,
       xferIdx             => 0,
       trgCnt              => (others => '0')
@@ -176,7 +178,7 @@ architecture rtl of EvrTxPDO is
    signal rEvr            : EvrRegType := EVR_REG_INIT_C;
    signal rinEvr          : EvrRegType;
 
-   signal pdoTrgBus       : std_logic;
+   signal pdoTglBus       : std_logic;
 
    signal rBus            : BusRegType := BUS_REG_INIT_C;
    signal rinBus          : BusRegType;
@@ -213,12 +215,14 @@ begin
          mapEvent( eventCode, v.eventCodes );
       end if;
 
-      if ( pdoTrg = '1' ) then
+      v.pdoTrg := pdoTrg;
+
+      if ( (pdoTrg and not rEvr.pdoTrg) = '1' ) then
          v.eventCodes    := (others => '0');
          v.eventCodesLst := rEvr.eventCodes;
          v.tsHi          := tsHi;
          v.tsLo          := tsLo;
-         v.pdoTrg        := not rEvr.pdoTrg;
+         v.pdoTgl        := not rEvr.pdoTgl;
       end if;
 
       rinEvr <= v;
@@ -239,12 +243,12 @@ begin
       port map (
          clk        => busClk,
          rst        => busRst,
-         datInp(0)  => rEvr.pdoTrg,
-         datOut(0)  => pdoTrgBus
+         datInp(0)  => rEvr.pdoTgl,
+         datOut(0)  => pdoTglBus
       );
 
    P_BUS_COMB : process ( rBus,
-                          pdoTrgBus,
+                          pdoTglBus,
                           busRep, lanRep,
                           tsArray,
                           ecArray,
@@ -258,11 +262,11 @@ begin
 
       case ( rBus.state ) is
          when IDLE =>
-            v.pdoTrg    := pdoTrgBus;
+            v.pdoTgl    := pdoTglBus;
             v.pdoDwAddr := resize( shift_right( TXPDO_ADDR_G, 2 ), v.pdoDwAddr'length );
             v.count     := COUNT_ZERO_C;
             v.xferIdx   := 0;
-            if ( rBus.pdoTrg /= pdoTrgBus ) then
+            if ( rBus.pdoTgl /= pdoTglBus ) then
                v.state  := X_TS;
                v.trgCnt := rBus.trgCnt + 1;
             end if;
