@@ -279,7 +279,14 @@ begin
    begin
       mgtOb                                  <= EVR_TRANSCEIVER_OB_INIT_C;
       -- don't use DRP based delay adjustment
-      -- DRP is not connected and we should/could use the PIPPM port on the GTP
+      -- DRP is not connected and we should/could use the PIPPM port on the GTP.
+      -- Currently the GTP is configured for TX buffer-bypass mode which should
+      -- be fine for ordinary use cases.
+      -- If higher precision is ever required then
+      --  - the PIPPM port needs to be enabled
+      --  - the TX buffer needs to be enabled
+      --  - openevr transceiver_dc must support PIPPM (is actually easier than using DRP
+      --    and the implementation should be straightforward / derived from the DRP one)
       mgtOb.dly_adj                          <= NONE; -- PIPPM not implemented yet in evr_dc
       mgtOb.rx_usr_clk                       <= evrRxClk;
       mgtOb.rx_data                          <= evrRxData;
