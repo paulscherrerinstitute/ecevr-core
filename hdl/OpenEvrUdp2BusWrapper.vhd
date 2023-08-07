@@ -92,7 +92,9 @@ architecture Impl of OpenEvrUdp2BusWrapper is
    signal dcModeLoc             : std_logic := DC_MODE_DIS_C;
    signal dcUpdate              : std_logic := '0';
    signal dcValue               : std_logic_vector(31 downto 0) := (others => '0');
-   signal dcStatus              : std_logic_vector(31 downto 0) := (others => '0');
+   signal dcStatusRx            : std_logic_vector(31 downto 0) := (others => '0');
+   signal dcStatusLoc           : std_logic_vector(31 downto 0) := (others => '0');
+   signal dcStatusLocSync       : std_logic_vector( 3 downto 0) := (others => '0');
    signal dcTopo                : std_logic_vector(31 downto 0) := (others => '0');
    signal dcTarget              : std_logic_vector(31 downto 0) := (others => '0');
    signal dcLocked              : std_logic := '0';
@@ -192,6 +194,7 @@ begin
          delay_comp_value      => dcValue,
          delay_comp_target     => dcTarget,
          delay_comp_locked_out => dcLocked,
+         delay_comp_status     => dc
 
          transceiverOb         => mgtOb,
          transceiverIb         => mgtIb,
@@ -225,7 +228,7 @@ begin
 
          delay_comp_update     => dcUpdate,
          delay_comp_rx         => dcValue,
-         delay_comp_status     => dcStatus,
+         delay_comp_status     => dcStatusRx,
          topology_addr         => dcTopo,
 
          -- Control interface (clk domain)
@@ -329,24 +332,26 @@ begin
 
    P_HZ_SYNC_EVT : entity work.SynchronizerBit
       generic map (
-         WIDTH_G   => 10
+         WIDTH_G   => 14
       )
       port map (
-         clk                => eventClkLoc,
-         rst                => '0',
-         datInp(0)          => hzTgl,
-         datInp(1)          => evrCfgReq.req,
-         datInp(3 downto 2) => mgtStatus.rxDispError,
-         datInp(5 downto 4) => mgtStatus.rxNotIntable,
-         datInp(6)          => mgtStatus.rxPllLocked,
-         datInp(7)          => linkOkLoc,
-         datInp(8)          => dcLocked,
-         datInp(9)          => dcModeLoc,
+         clk                   => eventClkLoc,
+         rst                   => '0',
+         datInp(0)             => hzTgl,
+         datInp(1)             => evrCfgReq.req,
+         datInp(3 downto 2)    => mgtStatus.rxDispError,
+         datInp(5 downto 4)    => mgtStatus.rxNotIntable,
+         datInp(6)             => mgtStatus.rxPllLocked,
+         datInp(7)             => linkOkLoc,
+         datInp(8)             => dcLocked,
+         datInp(9)             => dcModeLoc,
+         datInp(13 downto 10)  => dcStatusLoc(3 downto 0),
 
-         datOut(0)          => hzTglEvr,
-         datOut(1)          => cfgReqEvr,
-         datOut(8 downto 2) => statusReg(6 downto 0),
-         datOut(9)          => statusReg(24)
+         datOut(0)             => hzTglEvr,
+         datOut(1)             => cfgReqEvr,
+         datOut(8 downto 2)    => statusReg(6 downto 0),
+         datOut(9)             => statusReg(24),
+         datOut(13 downto 10)  => dcStatusLocSync
       );
 
    dcMode                   <= statusReg(24);
@@ -442,7 +447,8 @@ begin
          evrFreq,
          dcMeas,
          dcValue,
-         dcStatus,
+         dcStatusRx,
+         dcStatusLocSync,
          dcTarget,
          dcTopo
        ) is
@@ -484,7 +490,16 @@ begin
                         when "0000011" =>
                            rep.rdata := dcValue;
                         when "0000100" =>
-                           rep.rdata := dcStatus;
+                           -- match layout of EVR300
+                           rep.rdata := (others => '0');
+                           -- delay too long, delay too short, delay_valid, adjust_locked
+                           rep.rdata( 3 downto  0) := dcStatusLocSync;
+                           -- path delay
+                           --   000 : invalid
+                           --   001 : valid (coarse)
+                           --   011 : valid (medium)
+                           --   111 : valid (fine)
+                           rep.rdata(10 downto  8) := dcStatusRx(3 downto 0);
                         when "0000101" =>
                            rep.rdata := dcTopo;
                         when "0000110" =>
