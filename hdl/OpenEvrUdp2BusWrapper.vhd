@@ -499,7 +499,7 @@ begin
                            --   001 : valid (coarse)
                            --   011 : valid (medium)
                            --   111 : valid (fine)
-                           rep.rdata(10 downto  8) := dcStatusRx(3 downto 0);
+                           rep.rdata(10 downto  8) := dcStatusRx(2 downto 0);
                         when "0000101" =>
                            rep.rdata := dcTopo;
                         when "0000110" =>
