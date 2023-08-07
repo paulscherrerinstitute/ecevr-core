@@ -393,45 +393,44 @@ begin
 
    U_MST : entity work.psi_common_i2c_master
       generic map (
-         ClockFrequency_g   => CLOCK_FREQ_G,
-         I2cFrequency_g     => I2C_FREQ_G,
-         BusBusyTimeout_g   => BUSY_TIMEOUT_G,
-         CmdTimeout_g       => CMD_TIMEOUT_G,
-         InternalTriState_g => false
+         clock_frequency_g    => CLOCK_FREQ_G,
+         i2c_frequency_g      => I2C_FREQ_G,
+         bus_busy_timeout_g   => BUSY_TIMEOUT_G,
+         cmd_timeout_g        => CMD_TIMEOUT_G,
+         internal_tri_state_g => false
       )
       port map (
          -- Control Signals
-         Clk        => clk,
-         Rst        => rst,
+         clk_i                => clk,
+         rst_i                => rst,
 
          -- Command Interface
-         CmdRdy     => i2cCmdRdy,
-         CmdVld     => r.i2cCmd.vld,
-         CmdType    => r.i2cCmd.typ,
-         CmdData    => r.i2cCmd.dat,
-         CmdAck     => r.i2cCmd.ack,
+         cmd_rdy_o            => i2cCmdRdy,
+         cmd_vld_i            => r.i2cCmd.vld,
+         cmd_type_i           => r.i2cCmd.typ,
+         cmd_dat_i            => r.i2cCmd.dat,
+         cmd_ack_i            => r.i2cCmd.ack,
          -- Response Interface
-         RspVld     => rsp.vld,
-         RspType    => rsp.typ,
-         RspData    => rsp.dat,
-         RspAck     => rsp.ack,
-         RspArbLost => rsp.arbLost,
-         RspSeq     => rsp.seq,
+         rsp_vld_o            => rsp.vld,
+         rsp_type_o           => rsp.typ,
+         rsp_dat_o            => rsp.dat,
+         rsp_ack_o            => rsp.ack,
+         rsp_arb_lost_o       => rsp.arbLost,
+         rsp_seq_o            => rsp.seq,
          -- Status Interface
-         BusBusy    => rsp.busBsy,
-         TimeoutCmd => rsp.cmdTimo,
-         -- I2c Interface with internal Tri-State (InternalTriState_g = true)
-         I2cScl     => open,
-         I2cSda     => open,
-         -- I2c Interface with external Tri-State (InternalTriState_g = false)
-         I2cScl_I   => i2c_scl_i,
-         I2cScl_O   => i2c_scl_o,
-         I2cScl_T   => i2c_scl_t,
+         bus_busy_o           => rsp.busBsy,
+         timeout_cmd_o        => rsp.cmdTimo,
+         -- I2c Interface with internal Tri-State (internal_tri_state_g = true)
+         i2c_scl_io           => open,
+         i2c_sda_io           => open,
+         -- I2c Interface with external Tri-State (internal_tri_state_g = false)
+         i2c_scl_i            => i2c_scl_i,
+         i2c_scl_o            => i2c_scl_o,
+         i2c_scl_t            => i2c_scl_t,
 
-         I2cSda_I   => i2c_sda_i,
-         I2cSda_O   => i2c_sda_o,
-         I2cSda_T   => i2c_sda_t
-
+         i2c_sda_i            => i2c_sda_i,
+         i2c_sda_o            => i2c_sda_o,
+         i2c_sda_t            => i2c_sda_t
       );
 
    G_ILA : if ( GEN_ILA_G ) generate

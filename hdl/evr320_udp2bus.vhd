@@ -564,13 +564,13 @@ begin
 
     -- Instance
     inst_cdc_fast_stat : entity work.psi_common_status_cc
-      generic map(DataWidth_g => input_s'length)
-      port map(ClkA   => bus_CLK,
-               RstInA => bus_RESET,
-               DataA  => input_s,
-               ClkB   => evr_clk_i,
-               RstInB => evr_rst_i,
-               DataB  => output_s);
+      generic map(width_g => input_s'length)
+      port map(a_clk_i  => bus_CLK,
+               a_rst_i  => bus_RESET,
+               a_dat_i  => input_s,
+               b_clk_i  => evr_clk_i,
+               b_rst_i  => evr_rst_i,
+               b_dat_i  => output_s);
   end block;
 
 end architecture rtl;

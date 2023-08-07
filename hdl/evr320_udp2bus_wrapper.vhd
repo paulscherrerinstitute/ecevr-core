@@ -289,14 +289,14 @@ begin
   -- --------------------------------------------------------------------------
   clock_meas_inst : entity work.psi_common_clk_meas
     generic map(
-      MasterFrequency_g  => g_BUS_CLOCK_FREQ,
-      MaxMeasFrequency_g => 150000000
+      master_frequency_g   => g_BUS_CLOCK_FREQ,
+      max_meas_frequency_g => 150000000
     )
     port map(
-      ClkMaster   => bus_CLK,
-      Rst         => bus_RESET,
-      ClkTest     => clk_evr,
-      FrequencyHz => evr_frequency
+      clk_master_i         => bus_CLK,
+      rst_i                => bus_RESET,
+      clk_test_i           => clk_evr,
+      frequency_hz_o       => evr_frequency
     );
 
   -- --------------------------------------------------------------------------
