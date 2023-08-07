@@ -194,7 +194,7 @@ begin
          delay_comp_value      => dcValue,
          delay_comp_target     => dcTarget,
          delay_comp_locked_out => dcLocked,
-         delay_comp_status     => dc
+         delay_comp_status     => dcStatusLoc,
 
          transceiverOb         => mgtOb,
          transceiverIb         => mgtIb,
