@@ -40,6 +40,8 @@ entity OpenEvrUdp2BusWrapper is
       mgtStatus          : in  EvrMGTStatusType;
       mgtControl         : out EvrMGTControlType;
 
+      dcMode             : out std_logic;
+
       evrClk             : out std_logic;
       evrRst             : out std_logic;
 
@@ -87,7 +89,7 @@ architecture Impl of OpenEvrUdp2BusWrapper is
    signal evrTxClkLoc           : std_logic;
    signal evrTxRstLoc           : std_logic;
 
-   signal dcMode                : std_logic := DC_MODE_DIS_C;
+   signal dcModeLoc             : std_logic := DC_MODE_DIS_C;
    signal dcUpdate              : std_logic := '0';
    signal dcValue               : std_logic_vector(31 downto 0) := (others => '0');
    signal dcStatus              : std_logic_vector(31 downto 0) := (others => '0');
@@ -172,7 +174,7 @@ begin
          refclk_out            => evrTxClkLoc,
          refclk_rst            => evrTxRstLoc,
 
-         dc_mode               => dcMode,
+         dc_mode               => dcModeLoc,
          delay_meas_value      => dcMeasInp,
 
          -- flags (refclk domain)
@@ -327,7 +329,7 @@ begin
 
    P_HZ_SYNC_EVT : entity work.SynchronizerBit
       generic map (
-         WIDTH_G   => 9
+         WIDTH_G   => 10
       )
       port map (
          clk                => eventClkLoc,
@@ -339,13 +341,15 @@ begin
          datInp(6)          => mgtStatus.rxPllLocked,
          datInp(7)          => linkOkLoc,
          datInp(8)          => dcLocked,
+         datInp(9)          => dcModeLoc,
 
          datOut(0)          => hzTglEvr,
          datOut(1)          => cfgReqEvr,
-         datOut(8 downto 2) => statusReg(6 downto 0)
+         datOut(8 downto 2) => statusReg(6 downto 0),
+         datOut(9)          => statusReg(24)
       );
 
-   statusReg(24)            <= dcMode;
+   dcMode                   <= statusReg(24);
 
    P_FREQ_EVR : process ( eventClkLoc ) is
    begin
@@ -380,7 +384,6 @@ begin
          cfgReqLst : std_logic;
          ramVld    : std_logic;
          dcTarget  : std_logic_vector(31 downto 0);
-         dcMode    : std_logic;
          pulseGens : Evr320ConfigReqType;
       end record RegType;
 
@@ -388,7 +391,6 @@ begin
          cfgAckTgl => '0',
          cfgReqLst => '0',
          ramVld    => '0',
-         dcMode    => '0',
          dcTarget  => (others => '0'),
          pulseGens => EVR320_CONFIG_REQ_INIT_C
       );
@@ -493,10 +495,6 @@ begin
                   else
                      rep.berr := '0';
                      case ( busReqEvr.dwaddr(6 downto 0) ) is
-                        when "0000000" =>
-                           if ( busReqEvr.be(3) = '1' ) then
-                              v.dcMode := busReqEvr.data(24);
-                           end if;
                         when "0000110" =>
                            wr32( v.dcTarget, busReqEvr );
                         when others =>
@@ -589,7 +587,6 @@ begin
 
          busRepEvr        <= rep;
          rin              <= v;
-         dcMode           <= r.dcMode;
 
       end process P_COMB;
 
@@ -608,6 +605,8 @@ begin
             r <= rin;
          end if;
       end process P_REGS;
+
+      dcModeLoc <= '1' when unsigned(r.dcTarget) /= 0 else '0';
 
       G_PULSEGEN : for i in r.pulseGens.pulseGenParams'range generate
       begin

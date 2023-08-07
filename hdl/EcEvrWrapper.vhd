@@ -96,6 +96,7 @@ entity EcEvrWrapper is
 
     -- synchronized into sysClk
     evrStable         : out    std_logic;
+    evrDCMode         : out    std_logic     := '0';
 
     timingMGTStatus   : in     EvrMGTStatusType;
     timingMGTControl  : out    EvrMGTControlType;
@@ -227,6 +228,7 @@ architecture Impl of EcEvrWrapper is
 
       mgtStatus          : in  EvrMGTStatusType;
       mgtControl         : out EvrMGTControlType;
+      dcMode             : out std_logic;
 
       evrClk             : out std_logic;
       evrRst             : out std_logic;
@@ -599,6 +601,7 @@ begin
 
         mgtStatus          => timingMGTStatus,
         mgtControl         => timingMGTControl,
+        dcMode             => evrDCMode,
 
         evrClk             => eventClkLoc,
         evrRst             => eventRstLoc,
