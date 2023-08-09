@@ -603,16 +603,16 @@ architecture sim of EEPROMConfiguratorTb is
       151 => x"00",
       152 => x"00",
       153 => x"00",
-      154 => x"00",
+      154 => x"23",
       155 => x"04",
       156 => x"00",
       157 => x"00",
-      158 => x"00",
-      159 => x"00",
-      160 => x"00",
-      161 => x"00",
-      162 => x"00",
-      163 => x"00",
+      158 => x"80",
+      159 => x"78",
+      160 => x"56",
+      161 => x"34",
+      162 => x"12",
+      163 => x"56",
       164 => x"04",
       165 => x"00",
       166 => x"00",
@@ -960,6 +960,37 @@ architecture sim of EEPROMConfiguratorTb is
    signal progFound            : std_logic;
    signal progAddr             : unsigned(15 downto 0);
 
+   constant pgExp : Evr320PulseGenConfigArray := (
+      0 => (
+         pulseWidth => EvrDurationType ( to_unsigned( 4, EvrDurationType'length ) ),
+         pulseDelay => EvrDurationType ( to_unsigned( 0, EvrDurationType'length ) ),
+         pulseEvent => std_logic_vector( to_unsigned( 16#23#, 8 )                 ),
+         pulseEnbld => '1',
+         pulseInvrt => '0'
+      ),
+      1 => (
+         pulseWidth => EvrDurationType ( to_unsigned( 4, EvrDurationType'length ) ),
+         pulseDelay => EvrDurationType ( to_unsigned( 16#12345678#, EvrDurationType'length ) ),
+         pulseEvent => std_logic_vector( to_unsigned( 16#56#, 8 )                 ),
+         pulseEnbld => '1',
+         pulseInvrt => '0'
+      ),
+      others => (
+         pulseWidth => EvrDurationType ( to_unsigned( 4, EvrDurationType'length ) ),
+         pulseDelay => EvrDurationType ( to_unsigned( 0, EvrDurationType'length ) ),
+         pulseEvent => std_logic_vector( to_unsigned( 16#00#, 8 )                 ),
+         pulseEnbld => '0',
+         pulseInvrt => '0'
+      )
+   );
+
+   constant xtraEvtExp : Slv08Array := (
+      0 => std_logic_vector( to_unsigned( 16#11#, 8 ) ),
+      1 => std_logic_vector( to_unsigned( 16#22#, 8 ) ),
+      2 => std_logic_vector( to_unsigned( 16#33#, 8 ) ),
+      3 => std_logic_vector( to_unsigned( 16#44#, 8 ) )
+   );
+
 begin
 
    sda <= (sda_m_t or sda_m_o) and sda_s_o;
@@ -1016,10 +1047,12 @@ begin
               report "      Delay: " & integer'image(to_integer(unsigned(cfg.evr320.pulseGenParams(j).pulseDelay)));
               report "      Event: " & integer'image(to_integer(unsigned(cfg.evr320.pulseGenParams(j).pulseEvent)));
               report "      Enable:" & std_logic'image(cfg.evr320.pulseGenParams(j).pulseEnbld);
+              assert pgExp(j) = cfg.evr320.pulseGenParams(j) report "Evr Parameter mismatch" severity failure;
             end loop;
             report "  Extra Events:";
             for j in 0 to NUM_EXTRA_EVENTS_C - 1 loop
                report "    [" & integer'image(j) & "]: " & integer'image(to_integer(unsigned(cfg.evr320.extraEvents(j))));
+               assert xtraEvtExp(j) = cfg.evr320.extraEvents(j) report "Extra event mismatch" severity failure;
             end loop;
          end if;
          if ( wrAck.ack = '1' ) then
