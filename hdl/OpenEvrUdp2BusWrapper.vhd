@@ -388,7 +388,6 @@ begin
          cfgAckTgl : std_logic;
          cfgReqLst : std_logic;
          ramVld    : std_logic;
-         dcTarget  : std_logic_vector(31 downto 0);
          pulseGens : Evr320ConfigReqType;
       end record RegType;
 
@@ -396,7 +395,6 @@ begin
          cfgAckTgl => '0',
          cfgReqLst => '0',
          ramVld    => '0',
-         dcTarget  => (others => '0'),
          pulseGens => EVR320_CONFIG_REQ_INIT_C
       );
 
@@ -425,7 +423,7 @@ begin
          )
          port map (
             clkA    => eventClkLoc,
-            dinA    => r.dcTarget,
+            dinA    => r.pulseGens.dcTarget,
             clkB    => sysClk,
             douB    => dcTarget
          );
@@ -449,7 +447,6 @@ begin
          dcValue,
          dcStatusRx,
          dcStatusLocSync,
-         dcTarget,
          dcTopo
        ) is
          variable v      : RegType;
@@ -503,7 +500,7 @@ begin
                         when "0000101" =>
                            rep.rdata := dcTopo;
                         when "0000110" =>
-                           rep.rdata := r.dcTarget;
+                           rep.rdata := r.pulseGens.dcTarget;
                         when others =>
                            rep.berr  := '1';
                      end case;
@@ -511,7 +508,7 @@ begin
                      rep.berr := '0';
                      case ( busReqEvr.dwaddr(6 downto 0) ) is
                         when "0000110" =>
-                           wr32( v.dcTarget, busReqEvr );
+                           wr32( v.pulseGens.dcTarget, busReqEvr );
                         when others =>
                            rep.berr  := '1';
                      end case;
@@ -621,7 +618,7 @@ begin
          end if;
       end process P_REGS;
 
-      dcModeLoc <= '1' when unsigned(r.dcTarget) /= 0 else '0';
+      dcModeLoc <= '1' when unsigned(r.pulseGens.dcTarget) /= 0 else '0';
 
       G_PULSEGEN : for i in r.pulseGens.pulseGenParams'range generate
       begin

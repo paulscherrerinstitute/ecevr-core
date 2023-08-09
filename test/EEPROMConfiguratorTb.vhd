@@ -595,11 +595,11 @@ architecture sim of EEPROMConfiguratorTb is
       142 => x"ff",
       143 => x"ff",
       144 => x"ff",
-      145 => DC_TARGET_EXP_C( 7 downto  0),
-      146 => DC_TARGET_EXP_C(15 downto  8),
-      147 => DC_TARGET_EXP_C(23 downto 16),
-      148 => DC_TARGET_EXP_C(31 downto 24),
-      149 => x"04",
+      145 => x"04",
+      146 => DC_TARGET_EXP_C( 7 downto  0),
+      147 => DC_TARGET_EXP_C(15 downto  8),
+      148 => DC_TARGET_EXP_C(23 downto 16),
+      149 => DC_TARGET_EXP_C(31 downto 24),
       150 => x"04",
       151 => x"00",
       152 => x"00",
@@ -1051,8 +1051,8 @@ begin
                report "    [" & integer'image(j) & "]: " & integer'image(to_integer(unsigned(cfg.evr320.extraEvents(j))));
                assert xtraEvtExp(j) = cfg.evr320.extraEvents(j) report "Extra event mismatch" severity failure;
             end loop;
-            report "  DC Target: " & integer'image(to_integer(unsigned(cfg.dcTarget)));
-            assert cfg.dcTarget = DC_TARGET_EXP_C report "DC target mismatch" severity failure;
+            report "  DC Target: " & integer'image(to_integer(unsigned(cfg.evr320.dcTarget)));
+            assert cfg.evr320.dcTarget = DC_TARGET_EXP_C report "DC target mismatch" severity failure;
          end if;
          if ( wrAck.ack = '1' ) then
             run <= false;
