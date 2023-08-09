@@ -20,7 +20,7 @@ LANSRCS+=ESCFoEPkg.vhd
 LANSRCS+=MicroUDPPkg.vhd
 LANSRCS+=Udp2BusPkg.vhd
 LANSRCS+=SynchronizerBit.vhd
-#LANSRCS+=EEPROMContentPkg.vhd
+LANSRCS+=StrmMux.vhd
 
 SRCS = $(addprefix $(LAN9254_DIR)/,$(LANSRCS))
 SRCS+=$(addprefix ../hdl/,EvrTxPDOPkg.vhd)
@@ -30,7 +30,7 @@ SRCS+=$(addprefix $(PSI_COMMON_DIR)/,psi_common_logic_pkg.vhd)
 SRCS+=$(addprefix $(EVR320_DIR)/,evr320_pkg.vhd)
 SRCS+=$(addprefix ../hdl/,Evr320ConfigPkg.vhd)
 SRCS+=$(addprefix ../hdl/,EEPROMConfigPkg.vhd)
-SRCS+=$(addprefix ../hdl/,EEPROMContentPkg.vhd)
+SRCS+=EEPROMContentPkg.vhd
 SRCS+=$(addprefix ../hdl/,FoE2SpiPkg.vhd)
 SRCS+=$(addprefix ../hdl/,EcEvrBspPkg.vhd)
 SRCS+=$(addprefix $(PSI_COMMON_DIR)/,psi_common_bit_cc.vhd)
@@ -52,6 +52,8 @@ SRCS+=$(addprefix ../hdl/,EcEvrPulseGen.vhd)
 SRCS+=EcEvrPulseGenTb.vhd
 SRCS+=$(addprefix ../hdl/,ClockMeasure.vhd)
 SRCS+=ClockMeasureTb.vhd
+SRCS+=$(addprefix ../hdl/,I2cProgrammer.vhd)
+SRCS+=I2cProgrammerTb.vhd
 
 TSTS=$(filter %Tb,$(patsubst %.vhd,%,$(SRCS)))
 
@@ -74,9 +76,10 @@ ana: $(SRCS)
 	$(GHDL) -a -g -P$(LAN9254_DIR) $(addprefix -P, $(UNISIM_DIR)) $(SRCS)
 
 EEPROMContentPkg.vhd:
+	$(RM) $@
 	$(LAN9254_DIR)/../tool/EsiTool.py -V eeprom_config_tst.xml
 
 .PHONY: ana clean build test $(addprefix run_,$(TSTS))
 
 clean:
-	$(RM) $(notdir $(SRCS:%.vhd=%.o)) work-obj93.cf $(TSTS) e~*.o dump.ghw frame_data_e2_rbt_out.txt
+	$(RM) $(notdir $(SRCS:%.vhd=%.o)) work-obj93.cf $(TSTS) e~*.o dump.ghw frame_data_e2_rbt_out.txt EEPROMContentPkg.vhd

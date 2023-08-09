@@ -1,4 +1,4 @@
--- write stuff to I2C devices; mostly useful for initialization
+-- write stuff to I2C devices or the local bus; mostly useful for initialization
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -7,6 +7,7 @@ use ieee.numeric_std.all;
 use work.ESCBasicTypesPkg.all;
 use work.Lan9254Pkg.all;
 use work.EEPROMContentPkg.all;
+use work.Udp2BusPkg.all;
 
 -- EEPROM stream format:
 --  { cmdLo, cmdHi, n*data }
@@ -14,13 +15,22 @@ use work.EEPROMContentPkg.all;
 --  cmdLo[7:1] : i2c address
 --  cmdLo[  0] : i2c command (read: '1', write: '0')
 --
---  cmdLo      : 0x00 or 0xff => END of program marker
+--  cmdLo      : 0xff => END of program marker
+--  cmdLo      : 0xfe => local bus operation
 --
+-- for I2C:
 --  cmdHi[7]   : no stop condition
 --  cmdHi[6]   : reserved (write 0)
 --  cmdHi[5:4] : mux bits
 --  cmdHi[3:0] : 'n' - number of bytes in this command (-1)
---  
+-- for local bus operation:
+--  cmdHi[7]   : read ('1') / write ('0') (read not supported)
+--  cmdHi[7:4] : reserved (set to all-0)
+--  cmdHi[3:0] : bytes in this command (-1) (must be a multiple of 4;
+--               e.g., for 1 address and 1 data word the count is 2*4 - 1 = 7)
+--  cmdHi[1:0] : reserved (set to all-0)
+--  cmdHi is followed by cmdHi[3:2] + 1 words of which the first one is
+--  the target dwAddress (bits 1:0 must be "00" / reserved )
 
 entity I2cProgrammer is 
    generic (
@@ -51,18 +61,23 @@ entity I2cProgrammer is
       i2cReqRdy    : in  std_logic;
       i2cRep       : in  Lan9254StrmMstType;
       i2cRepRdy    : out std_logic;
-      i2cLock      : out std_logic
+      i2cLock      : out std_logic;
+
+      busReq       : out Udp2BusReqType;
+      busRep       : in  Udp2BusRepType := UDP2BUSREP_ERROR_C
    );
 end entity I2cProgrammer;
 
 architecture Impl of I2cProgrammer is
 
-   constant CMD_MAX_C : natural := 16;
-   constant CMD_LEN_C : natural := 2;
+   constant CMD_MAX_C    : natural                      := 16;
+   constant CMD_LEN_C    : natural                      := 2;
+
+   constant LCL_BUS_OP_C : std_logic_vector(7 downto 0) := x"FE";
 
    subtype CmdBufType is EEPROMArray(0 to (CMD_MAX_C + CMD_LEN_C)/2 - 1);
 
-   type StateType is (IDLE, SET_READ_PTR, SCHED_READ, WAIT_READ, PROC_CMD, EXEC_WRITE, DRAIN, DONE);
+   type StateType is (IDLE, SET_READ_PTR, SCHED_READ, WAIT_READ, PROC_CMD, EXEC_I2C_WRITE, EXEC_BUS_WRITE, DRAIN, DONE);
 
    type RegType is record
       state       : StateType;
@@ -145,10 +160,22 @@ architecture Impl of I2cProgrammer is
 
 begin
 
-   P_COMB : process (r, cfgVld, cfgAddr, cfgEmul, cfgEepSz2B, ack, i2cReqRdy, i2cRep) is
-      variable v : RegType;
+   P_COMB : process (r, cfgVld, cfgAddr, cfgEmul, cfgEepSz2B, ack, i2cReqRdy, i2cRep, busRep) is
+      variable v       : RegType;
+      variable nxtAddr : unsigned(busReq.dwaddr'range);
+      variable curAddr : unsigned(busReq.dwaddr'range);
    begin
       v   := r;
+
+      busReq        <= UDP2BUSREQ_INIT_C;
+      curAddr       := unsigned( r.cmdBuf(2) ) & unsigned( r.cmdBuf(1)(15 downto 2) );
+      busReq.dwaddr <= std_logic_vector( curAddr );
+      busReq.data   <= r.cmdBuf(4) & r.cmdBuf(3);
+      busReq.rdnwr  <= r.cmdBuf(0)(15);
+      busReq.be     <= ( others => '1' );
+      busReq.valid  <= '0';
+
+      nxtAddr       := curAddr + 1;
 
       case ( r.state ) is
 
@@ -286,20 +313,48 @@ begin
 
          when PROC_CMD =>
             -- prepare operation
-            if    ( ( r.cmdBuf(0)(7 downto 0) = x"00" ) or ( r.cmdBuf(0)(7 downto 0) = x"FF" ) ) then
+            if    ( r.cmdBuf(0)(7 downto 0) = x"FF" ) then
                -- found END marker
-               v.state := DONE;
-            elsif ( ( r.cmdBuf(0)(0) = I2C_RD_C ) or ( r.cmdBuf(0)(15) = I2C_NO_STOP_C ) ) then
-               -- too cumbersome to support when sharing a i2c bus and/or master
-               v.err   := '1';
-               v.state := DONE;
+               v.state    := DONE;
             else
                v.count    := unsigned( r.cmdBuf(0)(11 downto 8) );
-               v.retState := EXEC_WRITE;
+               v.retState := EXEC_I2C_WRITE;
                v.state    := SCHED_READ;
+               if    ( r.cmdBuf(0)(7 downto 0) = LCL_BUS_OP_C ) then
+                  v.retState := EXEC_BUS_WRITE;
+               elsif ( ( r.cmdBuf(0)(0) = I2C_RD_C ) or ( r.cmdBuf(0)(15) = I2C_NO_STOP_C ) ) then
+                  -- too cumbersome to support when sharing a i2c bus and/or master
+                  v.err      := '1';
+                  v.state    := DONE;
+               end if;
             end if;
 
-         when EXEC_WRITE =>
+         when EXEC_BUS_WRITE =>
+            busReq.valid <= '1';
+            if    ( shift_right(r.count, 2) = 0 ) then
+               -- done
+               busReq.valid <= '0';
+               -- prepare fetching the next command
+               v.wrp      := 0;
+               v.count    := to_unsigned( CMD_LEN_C - 1, v.count'length );
+               v.state    := SCHED_READ;
+               v.retState := PROC_CMD;
+            elsif ( busRep.valid = '1' ) then
+               v.count                  := r.count - 4;
+               v.cmdBuf(2)              := std_logic_vector( nxtAddr(29 downto 14) );
+               v.cmdBuf(1)(15 downto 2) := std_logic_vector( nxtAddr(13 downto  0) );
+               v.cmdBuf(4)              := r.cmdBuf(6);
+               v.cmdBuf(3)              := r.cmdBuf(5);
+               v.cmdBuf(6)              := r.cmdBuf(8);
+               v.cmdBuf(5)              := r.cmdBuf(7);
+               if ( busRep.berr = '1' ) then
+                  -- error handling
+                  v.err   := '1';
+                  v.state := DONE;
+               end if;
+            end if;
+
+         when EXEC_I2C_WRITE =>
             if ( r.repRdy = '1' ) then
                if ( i2cRep.valid = '1' ) then
                   -- got reply

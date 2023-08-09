@@ -7,6 +7,7 @@ use ieee.numeric_std.all;
 use work.ESCBasicTypesPkg.all;
 use work.Lan9254Pkg.all;
 use work.EEPROMContentPkg.all;
+use work.Udp2BusPkg.all;
 
 entity I2cProgrammerTb is 
 end entity I2cProgrammerTb;
@@ -39,6 +40,7 @@ architecture Sim of I2cProgrammerTb is
    signal vld : std_logic := '0';
 
    signal check : boolean := false;
+   signal busOp : natural := 0;
 
    type TstArray is array(natural range <>) of std_logic_vector(19 downto 0);
 
@@ -46,6 +48,9 @@ architecture Sim of I2cProgrammerTb is
    signal trdy : std_logic := '0';
 
    signal cfgAddr : unsigned(15 downto 0) := x"0023";
+
+   signal busReq  : Udp2BusReqType := UDP2BUSREQ_INIT_C;
+   signal busRep  : Udp2BusRepType := UDP2BUSREP_INIT_C;
 
    
    type ByteArray is array (natural range <>) of std_logic_vector( 7 downto 0);
@@ -79,11 +84,23 @@ architecture Sim of I2cProgrammerTb is
       3 => x"0ed00",
       4 => x"0bead",
       5 => x"1ffef",
-      6 => x"005C2",
-      7 => x"0af00",
-      8 => x"001fe",
-      9 => x"00203",
-     10 => x"1ffff"
+      6 => x"007fe",
+      7 => x"0001c",
+      8 => x"00018",
+      9 => x"02211",
+     10 => x"04433",
+     11 => x"005C2",
+     12 => x"0af00",
+     13 => x"001fe",
+     14 => x"00203",
+     15 => x"00bfe",
+     16 => x"00004",
+     17 => x"00018",
+     18 => x"0beef",
+     19 => x"0dead",
+     20 => x"0cafe",
+     21 => x"0affe",
+     22 => x"1ffff"
    );
 
    constant tstEmu : EEPROMArray(0 to 33) := (
@@ -126,6 +143,7 @@ begin
       if ( rising_edge( clk ) ) then
          if ( check ) then
             assert i2cStrmLock = "00" severity failure;
+            assert busOp = 3 report "Expected 2 bus-write operations but only tested " & integer'image(busOp) severity failure;
             if ( tstAddr = exp'length - 1 ) then
                run <= false;
                report "TEST PASSED";
@@ -210,7 +228,10 @@ begin
          i2cReqRdy    => i2cStrmRdyIb(0),
          i2cRep       => i2cStrmMstOb(0),
          i2cRepRdy    => i2cStrmRdyOb(0),
-         i2cLock      => i2cStrmLock(0)
+         i2cLock      => i2cStrmLock(0),
+
+         busReq       => busReq,
+         busRep       => busRep
       );
 
    U_MUX  : entity work.StrmMux
@@ -291,6 +312,32 @@ begin
          dataOut    => tstData
       
       );
+
+   P_BUS_CHECK : process ( clk ) is
+      constant BASE_C : integer := 16#00180004#/4;
+   begin
+      if ( rising_edge( clk ) ) then 
+         busRep.valid <= '0';
+         if ( ( busReq.valid and not busRep.valid ) = '1' ) then
+            if    ( to_integer(unsigned(busReq.dwAddr)) = BASE_C + 0 ) then
+               assert ( busReq.data = x"deadbeef" ) report "Bus-write data mismatch" severity failure;
+               busRep.berr <= '0';
+               busOp       <= busOp + 1;
+            elsif ( to_integer(unsigned(busReq.dwAddr)) = BASE_C + 1 ) then
+               assert ( busReq.data = x"affecafe" ) report "Bus-write data mismatch" severity failure;
+               busRep.berr <= '0';
+               busOp       <= busOp + 1;
+            elsif ( to_integer(unsigned(busReq.dwAddr)) = BASE_C + 6 ) then
+               assert ( busReq.data = x"44332211" ) report "Bus-write data mismatch" severity failure;
+               busRep.berr <= '0';
+               busOp       <= busOp + 1;
+            else
+               busRep.berr <= '1';
+            end if;
+            busRep.valid <= '1';
+         end if;
+      end if;
+   end process P_BUS_CHECK;
 
    sdaBus <= sdaSrc and sdaDst and sdaMst;
 
