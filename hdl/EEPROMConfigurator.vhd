@@ -83,7 +83,8 @@ architecture rtl of EEPROMConfigurator is
 
    constant VERSION_OFF_C         : natural       := 0;
    constant NET_CFG_OFF_C         : natural       := VERSION_OFF_C + 1;
-   constant EVR_NPG_OFF_C         : natural       := NET_CFG_OFF_C + slv08ArrayLen( toSlv08Array( makeIPAddrConfigReq      ) );
+   constant EVR_DCT_OFF_C         : natural       := NET_CFG_OFF_C + slv08ArrayLen( toSlv08Array( makeIPAddrConfigReq      ) );
+   constant EVR_NPG_OFF_C         : natural       := EVR_DCT_OFF_C + 4;
    constant EVR_CFG_OFF_C         : natural       := EVR_NPG_OFF_C + 1;
    constant TXP_CFG_OFF_C         : natural       := EVR_CFG_OFF_C + slv08ArrayLen( toSlv08Array( EVR320_CONFIG_REQ_INIT_C ) );
    constant CFG_LEN_C             : natural       := TXP_CFG_OFF_C + slv08ArrayLen( toSlv08Array( EVR_TXPDO_CONFIG_INIT_C  ) );
@@ -299,6 +300,7 @@ begin
    begin
       configReqLoc.version        <= r.cfgImg(VERSION_OFF_C);
       configReqLoc.net            <= toIPAddrConfigReqType( r.cfgImg(NET_CFG_OFF_C to EVR_NPG_OFF_C - 1 ) );
+      configReqLoc.dcTarget       <= toSlv                ( r.cfgImg(EVR_DCT_OFF_C to EVR_NPG_OFF_C - 1 ) );
       configReqLoc.evr320NumPG    <= r.cfgImg(EVR_NPG_OFF_C);
       configReqLoc.evr320         <= toEvr320ConfigReqType( r.cfgImg(EVR_CFG_OFF_C to TXP_CFG_OFF_C - 1 ) );
       configReqLoc.txPDO          <= toEvrTxPDOConfigType ( r.cfgImg(TXP_CFG_OFF_C to CFG_LEN_C     - 1 ) );

@@ -88,7 +88,7 @@
           <ConfigData>91020144000000000000004000002b00</ConfigData>
           <Category>
             <CatNo>1</CatNo>
-            <Data>01aabbccddeeffffffffffffff0404000080000000000004000000000000000004000000000000000004000000000000000011223344010102000000</Data>
+            <Data>02aabbccddeeffffffffffffff0404000080000000000004000000000000000004000000000000000004000000000000000011223344010102000000</Data>
           </Category>
           <VendorSpecific>
             <Segment Swap8="0">seg1</Segment>
