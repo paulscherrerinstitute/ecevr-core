@@ -21,3 +21,8 @@ not been implemented in firmware (as this is not needed for regular
 firmware updates). For special applications, testing and debugging the
 `spiFlashRead` utility can be employed to read back the memory.
 Usage info is available on-line (`-h` option).
+
+## `versaClkPgm`
+
+Use this program to read and program the output dividers of the VersaClock chip.
+This is used to change the reference frequency of the EVR clock.
