@@ -1,5 +1,12 @@
 *.swp
 test/*.o
 test/work-obj*.cf
+test/*Tb
 test/e~*.lst
 test/config.local.mk
+test/frame_data*.txt
+test/EEPROMContentPkg.vhd
+sw/*.o
+sw/ecurcli
+sw/spiFlashRead
+sw/versaClkPgm
