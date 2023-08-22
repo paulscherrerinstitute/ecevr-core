@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='ASCII'?>
+<?xml version='1.0' encoding='utf-8'?>
 <EtherCATInfo>
   <Vendor>
     <Id>#x505349</Id>
@@ -86,12 +86,19 @@
         <Eeprom AssignToPdi="1">
           <ByteSize>2048</ByteSize>
           <ConfigData>91020144000000000000004000002b00</ConfigData>
+          <BootStrap>0010000100115000</BootStrap>
           <Category>
             <CatNo>1</CatNo>
-            <Data>02aabbccddeeffffffffffffff0404000080000000000004000000000000000004000000000000000004000000000000000011223344010102000000</Data>
+            <Data>02aabbccddeeffffffffffffff040000000004000000000000000004000000000000000004000000000000000004000000000000000011223344000104000000</Data>
+          </Category>
+          <Category>
+            <CatNo>2</CatNo>
+            <Data>d415418103d06b68d4124d00d0d412646301ffff</Data>
           </Category>
           <VendorSpecific>
             <Segment Swap8="0">seg1</Segment>
+            <ClockFreqMHz DriverName="VersaClock6">100.333</ClockFreqMHz>
+            <EvrDCTargetNS>0</EvrDCTargetNS>
           </VendorSpecific>
         </Eeprom>
       </Device>
