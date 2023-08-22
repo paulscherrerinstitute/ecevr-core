@@ -25,7 +25,7 @@ use work.Udp2BusPkg.all;
 --  cmdHi[3:0] : 'n' - number of bytes in this command (-1)
 -- for local bus operation:
 --  cmdHi[7]   : read ('1') / write ('0') (read not supported)
---  cmdHi[7:4] : reserved (set to all-0)
+--  cmdHi[6:4] : reserved (set to all-0)
 --  cmdHi[3:0] : bytes in this command (-1) (must be a multiple of 4;
 --               e.g., for 1 address and 1 data word the count is 2*4 - 1 = 7)
 --  cmdHi[1:0] : reserved (set to all-0)
