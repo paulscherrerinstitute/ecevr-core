@@ -253,8 +253,9 @@ architecture Impl of EcEvrWrapper is
     );
   end component OpenEvrUdp2BusWrapper;
 
-  constant NUM_BUS_MSTS_C           : natural := 1;
+  constant NUM_BUS_MSTS_C           : natural := 2;
   constant BUS_MIDX_PDO_C           : natural := 0;
+  constant BUS_MIDX_PRG_C           : natural := 0;
 
   function MEM_OFFSET_F return unsigned is
      variable v : unsigned(31 downto 0) := (others => 'X');
@@ -759,7 +760,10 @@ begin
       i2cReqRdy          => i2cStrmReqRdy(I2C_MST_PRG_C),
       i2cRep             => i2cStrmRepMst(I2C_MST_PRG_C),
       i2cRepRdy          => i2cStrmRepRdy(I2C_MST_PRG_C),
-      i2cLock            => i2cStrmLock  (I2C_MST_PRG_C)
+      i2cLock            => i2cStrmLock  (I2C_MST_PRG_C),
+
+      busReq             => busMstReq(BUS_MIDX_PRG_C),
+      busRep             => busMstRep(BUS_MIDX_PRG_C)
     );
 
   i2cProgValid <= (i2cProgFound and i2cProgRun and I2C_CLK_PRG_ENA_G);
