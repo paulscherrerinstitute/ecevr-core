@@ -255,7 +255,7 @@ architecture Impl of EcEvrWrapper is
 
   constant NUM_BUS_MSTS_C           : natural := 2;
   constant BUS_MIDX_PDO_C           : natural := 0;
-  constant BUS_MIDX_PRG_C           : natural := 0;
+  constant BUS_MIDX_PRG_C           : natural := 1;
 
   function MEM_OFFSET_F return unsigned is
      variable v : unsigned(31 downto 0) := (others => 'X');
