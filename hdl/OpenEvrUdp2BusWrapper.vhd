@@ -14,7 +14,9 @@ entity OpenEvrUdp2BusWrapper is
    generic (
       SYS_CLK_FREQ_G     : real;
       RX_POL_INVERT_G    : std_logic := '0';
-      TX_POL_INVERT_G    : std_logic := '0'
+      TX_POL_INVERT_G    : std_logic := '0';
+      -- covers 75.0..150.0 MHz event clocks
+      MMCM_MULTIPLIER_G  : real      := 8.0
    );
    port (
       sysClk             : in  std_logic;
@@ -167,7 +169,8 @@ begin
 
    U_EVR_DC : entity work.evr_dc
       generic map (
-         MARK_DEBUG_ENABLE     => "TRUE"
+         MARK_DEBUG_ENABLE     => "TRUE",
+         MMCM_MULTIPLIER       => MMCM_MULTIPLIER_G
       )
       port map (
          -- System bus clock
