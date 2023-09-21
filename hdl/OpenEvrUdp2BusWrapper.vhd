@@ -77,6 +77,26 @@ architecture Impl of OpenEvrUdp2BusWrapper is
    constant HZ_C                : natural   := natural( SYS_CLK_FREQ_G ) - 1;
    constant HZ_W_C              : natural   := numBits( HZ_C )           + 1;
 
+   type EvrTimestampSRType is record
+      hi                        : std_logic_vector(31 downto 0);
+      lo                        : unsigned(31 downto 0);
+      sr                        : std_logic_vector(31 downto 0);
+      vld                       : std_logic;
+   end record EvrTimestampSRType;
+
+   constant EVR_TIMESTAMP_SR_INIT_C : EvrTimestampSRType := (
+      hi                        => ( others => '0' ),
+      lo                        => ( others => '0' ),
+      sr                        => ( others => '0' ),
+      vld                       => '0'
+   );
+
+   constant EC_TS_SEC_0_C       : std_logic_vector( 7 downto 0) := x"70";
+   constant EC_TS_SEC_1_C       : std_logic_vector( 7 downto 0) := x"71";
+   constant EC_TS_UPD_C         : std_logic_vector( 7 downto 0) := x"7D";
+
+   signal rEvrTs                : EvrTimestampSRType := EVR_TIMESTAMP_SR_INIT_C;
+
    signal eventClkLoc           : std_logic;
    signal eventRstLoc           : std_logic;
    signal eventCodeLoc          : std_logic_vector( 7 downto 0);
@@ -126,7 +146,6 @@ architecture Impl of OpenEvrUdp2BusWrapper is
    signal evrStreamVldLoc       : std_logic;
    signal evrStreamAddrLoc      : std_logic_vector(10 downto 0);
    signal evrStreamDataLoc      : std_logic_vector( 7 downto 0);
-
 
    attribute KEEP               : string;
 
@@ -242,6 +261,26 @@ begin
          clear_flag            => Z128_c,
          reset                 => eventRstLoc
       );
+
+   P_TS_SHIFT : process ( eventClkLoc ) is
+   begin
+      if ( rising_edge( eventClkLoc ) ) then
+         if ( eventRstLoc = '1' ) then
+            rEvrTs <= EVR_TIMESTAMP_SR_INIT_C;
+         else
+            rEvrTs.lo <= rEvrTs.lo + 1;
+            if    ( eventCodeLoc = EC_TS_SEC_0_C ) then
+               rEvrTs.sr <= rEvrTs.sr(rEvrTs.sr'left - 1 downto 0) & '0';
+            elsif ( eventCodeLoc = EC_TS_SEC_1_C ) then
+               rEvrTs.sr <= rEvrTs.sr(rEvrTs.sr'left - 1 downto 0) & '1';
+            elsif ( eventCodeLoc = EC_TS_UPD_C   ) then
+               rEvrTs.hi  <= rEvrTs.sr;
+               rEvrTs.lo  <= (others => '0');
+               rEvrTs.vld <= '1';
+            end if;
+         end if;
+      end if;
+   end process P_TS_SHIFT;
 
    G_DBUF_ILA : if ( true ) generate
    begin
@@ -675,5 +714,9 @@ begin
    evrStreamAddr      <= evrStreamAddrLoc;
    evrStreamVld       <= evrStreamVldLoc;
    evrStreamData      <= evrStreamDataLoc;
+
+   evrTimestampHi     <= rEvrTs.hi;
+   evrTimestampLo     <= std_logic_vector( rEvrTs.lo );
+   evrTimestampVld    <= rEvrTs.vld;
 
 end architecture Impl;
