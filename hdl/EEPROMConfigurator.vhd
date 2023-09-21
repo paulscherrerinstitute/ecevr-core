@@ -19,6 +19,7 @@ entity EEPROMConfigurator is
       EEPROM_OFFSET_G    : natural := 0;       -- address of the configuration area
                                                -- if set to 0 then the SII category
                                                -- headers are scanned.
+      EEPROM_INIT_G      : EEPROMArray := EEPROM_INIT_C;
       CATEGORY_ID_G      : std_logic_vector(15 downto 0) := x"0001";
                                                -- category ID to scan for; use a device-
                                                -- (or vendor-) specific ID according to
@@ -258,9 +259,9 @@ architecture rtl of EEPROMConfigurator is
       constant waddr : natural := to_integer(r.eepAddr(r.eepAddr'left downto 1));
    begin
       if ( r.eepAddr(0) = '1' ) then
-         return EEPROM_INIT_C(waddr)(15 downto 8);
+         return EEPROM_INIT_G(waddr)(15 downto 8);
       else
-         return EEPROM_INIT_C(waddr)( 7 downto 0);
+         return EEPROM_INIT_G(waddr)( 7 downto 0);
       end if;
    end function readEmul;
 

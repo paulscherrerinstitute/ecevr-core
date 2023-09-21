@@ -943,6 +943,15 @@ architecture sim of EEPROMConfiguratorTb is
 
    constant EEPROM_8_INIT_C : Slv08Array := EEPROM_INIT_2_C; --EEPROM_CONFIGURED_C;
 
+   function EEPROM_16_INIT_F(constant x: in Slv08Array) return EEPROMArray is
+      variable v : EEPROMArray(0 to x'length/2 - 1);
+   begin
+      for i in v'range loop
+        v(i) := x(2*i+1) & x(2*i);
+      end loop;
+      return v;
+   end function EEPROM_16_INIT_F;
+
    signal wrReq : EEPROMWriteWordReqType := (
       waddr => to_unsigned(16, 15),
       wdata => x"cafe",
@@ -1089,6 +1098,7 @@ begin
       generic map (
          EEPROM_OFFSET_G            => 0, --128,
          EEPROM_SIZE_G              => (8*SIZE_BYTES_C),
+         EEPROM_INIT_G              => EEPROM_16_INIT_F( EEPROM_8_INIT_C ),
          MAX_TXPDO_MAPS_G           => MAX_TXPDO_MAPS_C,
          I2C_ADDR_G                 => "1010000",
          GEN_ILA_G                  => false
