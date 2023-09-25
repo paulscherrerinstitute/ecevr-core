@@ -44,7 +44,9 @@ entity EvrTxPDO is
       busRep              : in  Udp2BusRepType;
 
       -- diagnostics
-      trgCnt              : out unsigned(15 downto 0)
+      trgCnt              : out unsigned(15 downto 0);
+
+      debug               : out std_logic_vector(63 downto 0) := (others => '0')
    );
 end entity EvrTxPDO;
 
@@ -400,5 +402,7 @@ begin
    busReq <= rBus.busReq;
 
    trgCnt <= rBus.trgCnt;
+
+   debug  <= ecArray(1) & ecArray(0);
 
 end architecture rtl;

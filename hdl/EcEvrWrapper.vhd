@@ -249,7 +249,8 @@ architecture Impl of EcEvrWrapper is
       evrStreamAddr      : out std_logic_vector(10 downto 0);
       evrStreamData      : out std_logic_vector( 7 downto 0);
 
-      mmcm_locked        : out std_logic
+      mmcm_locked        : out std_logic;
+      debug              : in  std_logic_vector(63 downto 0) := (others => '0')
     );
   end component OpenEvrUdp2BusWrapper;
 
@@ -402,6 +403,8 @@ architecture Impl of EcEvrWrapper is
 
   signal eventClkLoc     : std_logic;
   signal eventRstLoc     : std_logic;
+
+  signal txPdoDebug      : std_logic_vector(63 downto 0);
 
 begin
 
@@ -621,7 +624,9 @@ begin
         evrStreamVld       => dbufStreamValid,
         evrStreamAddr      => dbufStreamAddr,
         evrStreamData      => dbufStreamData,
-        mmcm_locked        => timingMMCMLocked
+        mmcm_locked        => timingMMCMLocked,
+
+        debug              => txPdoDebug
       );
   end generate G_OPEN_EVR;
 
@@ -700,7 +705,9 @@ begin
       busReq             => busMstReq(BUS_MIDX_PDO_C),
       busRep             => busMstRep(BUS_MIDX_PDO_C),
 
-      trgCnt             => txPdoTrgCount
+      trgCnt             => txPdoTrgCount,
+
+      debug              => txPdoDebug
     );
 
   U_EEP_CFG : entity work.EEPROMConfigurator

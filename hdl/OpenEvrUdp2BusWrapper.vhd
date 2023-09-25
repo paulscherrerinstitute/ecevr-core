@@ -62,7 +62,8 @@ entity OpenEvrUdp2BusWrapper is
       evrStreamAddr      : out std_logic_vector(10 downto 0);
       evrStreamData      : out std_logic_vector( 7 downto 0);
 
-      mmcm_locked        : out std_logic
+      mmcm_locked        : out std_logic;
+      debug              : in  std_logic_vector(63 downto 0) := (others => '0')
    );
 
 end entity OpenEvrUdp2BusWrapper;
@@ -311,7 +312,7 @@ begin
             probe2(31 downto  0) => busRepEvr.rdata,
             probe2(63 downto 32) => busReqEvr.data,
 
-            probe3               => (others => '0')
+            probe3               => debug
          );
 
    end generate G_DBUF_ILA;
