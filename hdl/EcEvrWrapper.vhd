@@ -45,7 +45,8 @@ entity EcEvrWrapper is
     EVR_FLAVOR_G      : string         := "OPENEVR";
     RX_POL_INVERT_G   : std_logic      := '0';
     TX_POL_INVERT_G   : std_logic      := '0';
-    I2C_CLK_PRG_ENA_G : std_logic      := '1'
+    I2C_CLK_PRG_ENA_G : std_logic      := '1';
+    EVR_MMCM_MULT_G   : real           := 8.0
   );
   port (
     sysClk            : in     std_logic;
@@ -203,7 +204,8 @@ architecture Impl of EcEvrWrapper is
     generic (
       SYS_CLK_FREQ_G     : real;
       RX_POL_INVERT_G    : std_logic := '0';
-      TX_POL_INVERT_G    : std_logic := '0'
+      TX_POL_INVERT_G    : std_logic := '0';
+      MMCM_MULTIPLIER_G  : real      := 8.0
     );
     port (
       sysClk             : in  std_logic;
@@ -582,7 +584,8 @@ begin
       generic map (
         SYS_CLK_FREQ_G     => CLK_FREQ_G,
         RX_POL_INVERT_G    => RX_POL_INVERT_G,
-        TX_POL_INVERT_G    => TX_POL_INVERT_G
+        TX_POL_INVERT_G    => TX_POL_INVERT_G,
+        MMCM_MULTIPLIER_G  => EVR_MMCM_MULT_G
       )
       port map (
         sysClk             => sysClk,
